@@ -133,6 +133,7 @@ class EmailRepository
         // Get real drafts count from EmailDraft model
         $user = auth()->user();
         $draftsCount = \App\Models\EmailDraft::where('user_id', $user->id)
+            ->where('is_deleted', false)
             ->when($accountId, function ($query) use ($accountId) {
                 return $query->where('email_account_id', $accountId);
             })
