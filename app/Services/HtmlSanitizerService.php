@@ -57,7 +57,7 @@ class HtmlSanitizerService
         if (empty($html)) {
             return '';
         }
-        
+
         Log::info('=== HtmlSanitizer: Input analysis ===', [
             'html' => $html,
             'input_length' => strlen($html),

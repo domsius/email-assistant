@@ -48,7 +48,7 @@ class EmailAccountController extends Controller
                 $processedEmails = $account->emailMessages()->where('status', 'processed')->count();
                 $pendingEmails = $account->emailMessages()->where('status', 'pending')->count();
                 $lastEmail = $account->emailMessages()->latest('received_at')->first();
-                
+
                 return [
                     'id' => $account->id,
                     'email' => $account->email_address,
@@ -71,8 +71,8 @@ class EmailAccountController extends Controller
                         'status' => $account->sync_status,
                         'progress' => $account->sync_progress,
                         'total' => $account->sync_total,
-                        'percentage' => $account->sync_total > 0 
-                            ? round(($account->sync_progress / $account->sync_total) * 100, 2) 
+                        'percentage' => $account->sync_total > 0
+                            ? round(($account->sync_progress / $account->sync_total) * 100, 2)
                             : 0,
                         'error' => $account->sync_error,
                         'startedAt' => $account->sync_started_at,

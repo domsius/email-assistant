@@ -65,6 +65,22 @@ class EmailOperationsController extends Controller
     }
 
     /**
+     * Mark emails as not spam
+     */
+    public function notSpam(Request $request): RedirectResponse
+    {
+        $user = auth()->user();
+        $emailIds = $request->input('emailIds', []);
+
+        $result = $this->emailService->markAsNotSpam($emailIds, $user->company_id);
+
+        return back()->with(
+            $result['success'] ? 'success' : 'error',
+            $result['message']
+        );
+    }
+
+    /**
      * Unarchive emails
      */
     public function unarchive(Request $request): RedirectResponse
@@ -105,6 +121,22 @@ class EmailOperationsController extends Controller
         $emailIds = $request->input('emailIds', []);
 
         $result = $this->emailService->restoreEmails($emailIds, $user->company_id);
+
+        return back()->with(
+            $result['success'] ? 'success' : 'error',
+            $result['message']
+        );
+    }
+
+    /**
+     * Permanently delete emails
+     */
+    public function permanentDelete(Request $request): RedirectResponse
+    {
+        $user = auth()->user();
+        $emailIds = $request->input('emailIds', []);
+
+        $result = $this->emailService->permanentDelete($emailIds, $user->company_id);
 
         return back()->with(
             $result['success'] ? 'success' : 'error',

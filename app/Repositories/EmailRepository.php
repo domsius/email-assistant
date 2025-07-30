@@ -51,24 +51,24 @@ class EmailRepository
 
         // Convert cursor (page number) to integer
         $page = $cursor ? (int) $cursor : null;
-        
+
         // Log the query for debugging
         \Log::info('Email query SQL:', [
             'sql' => $query->toSql(),
-            'bindings' => $query->getBindings()
+            'bindings' => $query->getBindings(),
         ]);
 
         $paginator = $query->orderBy('received_at', 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
-            
+
         // Log first email data
         if ($paginator->count() > 0) {
             $firstEmail = $paginator->first();
             \Log::info('First paginated email:', [
                 'id' => $firstEmail->id,
-                'has_body_content' => !empty($firstEmail->body_content),
-                'has_body_html' => !empty($firstEmail->body_html),
-                'has_body_plain' => !empty($firstEmail->body_plain),
+                'has_body_content' => ! empty($firstEmail->body_content),
+                'has_body_html' => ! empty($firstEmail->body_html),
+                'has_body_plain' => ! empty($firstEmail->body_plain),
                 'body_content_length' => strlen($firstEmail->body_content ?? ''),
             ]);
         }
@@ -186,6 +186,18 @@ class EmailRepository
     }
 
     /**
+     * Mark emails as not spam (move from spam to inbox)
+     */
+    public function markAsNotSpam(array $emailIds, int $companyId): int
+    {
+        return $this->updateEmailsWithCompanyCheck($emailIds, $companyId, [
+            'folder' => 'INBOX',
+            'is_archived' => false,
+            'is_deleted' => false,
+        ]);
+    }
+
+    /**
      * Move emails to trash
      */
     public function deleteEmails(array $emailIds, int $companyId): int
@@ -242,6 +254,24 @@ class EmailRepository
             ]);
 
         return $restored;
+    }
+
+    /**
+     * Permanently delete emails (hard delete from database)
+     */
+    public function permanentDelete(array $emailIds, int $companyId): int
+    {
+        // Sanitize email IDs
+        $emailIds = array_map('intval', $emailIds);
+
+        // Permanently delete records from database
+        return $this->model
+            ->withTrashed()
+            ->whereIn('id', $emailIds)
+            ->whereHas('emailAccount', function ($query) use ($companyId) {
+                $query->where('company_id', $companyId);
+            })
+            ->forceDelete();
     }
 
     /**

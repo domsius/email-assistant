@@ -248,8 +248,8 @@ class EmailAccountController extends Controller
             'sync_error' => $emailAccount->sync_error,
             'sync_started_at' => $emailAccount->sync_started_at,
             'sync_completed_at' => $emailAccount->sync_completed_at,
-            'percentage' => $emailAccount->sync_total > 0 
-                ? round(($emailAccount->sync_progress / $emailAccount->sync_total) * 100, 2) 
+            'percentage' => $emailAccount->sync_total > 0
+                ? round(($emailAccount->sync_progress / $emailAccount->sync_total) * 100, 2)
                 : 0,
         ]);
     }

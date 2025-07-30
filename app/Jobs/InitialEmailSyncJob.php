@@ -29,7 +29,7 @@ class InitialEmailSyncJob implements ShouldQueue
      * @var int
      */
     public $timeout = 1800; // 30 minutes
-    
+
     /**
      * Maximum emails to sync in initial sync
      *
@@ -71,7 +71,7 @@ class InitialEmailSyncJob implements ShouldQueue
             $provider = $providerFactory->createProvider($this->emailAccount);
             $accountInfo = $provider->getAccountInfo();
             $totalMessages = $accountInfo['messages_total'] ?? 0;
-            
+
             // Limit initial sync to reasonable amount
             $messagesToSync = min($totalMessages, $this->maxInitialSync);
 
@@ -102,7 +102,7 @@ class InitialEmailSyncJob implements ShouldQueue
 
                 if ($result['success']) {
                     $processedTotal += $result['processed'];
-                    
+
                     // Update progress
                     $this->emailAccount->update([
                         'sync_progress' => $processedTotal,
@@ -138,9 +138,9 @@ class InitialEmailSyncJob implements ShouldQueue
             Log::info('Initial email sync completed', [
                 'account_id' => $this->emailAccount->id,
                 'total_processed' => $processedTotal,
-                'note' => $totalMessages > $this->maxInitialSync 
+                'note' => $totalMessages > $this->maxInitialSync
                     ? "Limited to {$this->maxInitialSync} most recent emails. Total account has {$totalMessages} emails."
-                    : "All emails synced",
+                    : 'All emails synced',
             ]);
 
         } catch (\Exception $e) {
@@ -173,7 +173,7 @@ class InitialEmailSyncJob implements ShouldQueue
         // Update account status to indicate sync failure
         $this->emailAccount->update([
             'sync_status' => 'failed',
-            'sync_error' => 'Sync failed permanently: ' . $exception->getMessage(),
+            'sync_error' => 'Sync failed permanently: '.$exception->getMessage(),
             'sync_completed_at' => now(),
         ]);
     }

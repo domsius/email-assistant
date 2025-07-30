@@ -171,7 +171,7 @@ class OutlookService implements EmailProviderInterface
         }
     }
 
-    public function fetchEmails(int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
+    public function fetchEmails(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
     {
         try {
             if (! $this->isAuthenticated() || ! $this->graphClient) {
@@ -189,17 +189,17 @@ class OutlookService implements EmailProviderInterface
 
             // Build filter query
             $filters = [];
-            
+
             // No date filter - fetching most recent emails up to the limit
             // Emails will be ordered by receivedDateTime desc
-            
+
             // Add unread filter if not fetching all
-            if (!$fetchAll) {
+            if (! $fetchAll) {
                 $filters[] = 'isRead eq false';
             }
-            
+
             // Combine filters with AND
-            if (!empty($filters)) {
+            if (! empty($filters)) {
                 $requestConfig->queryParameters->filter = implode(' and ', $filters);
             }
 
@@ -309,26 +309,26 @@ class OutlookService implements EmailProviderInterface
             $body->setContentType(new \Microsoft\Graph\Generated\Models\BodyType('text'));
             $body->setContent($emailData['body']);
             $message->setBody($body);
-            
+
             // Set threading headers for replies
-            if (!empty($emailData['in_reply_to'])) {
+            if (! empty($emailData['in_reply_to'])) {
                 // Note: Microsoft Graph API handles threading differently than traditional email headers
                 // The conversationId should be set if this is part of an existing conversation
                 // For now, we'll set the internetMessageHeaders
                 $headers = [];
-                
+
                 $inReplyToHeader = new \Microsoft\Graph\Generated\Models\InternetMessageHeader;
                 $inReplyToHeader->setName('In-Reply-To');
-                $inReplyToHeader->setValue('<' . $emailData['in_reply_to'] . '>');
+                $inReplyToHeader->setValue('<'.$emailData['in_reply_to'].'>');
                 $headers[] = $inReplyToHeader;
-                
-                if (!empty($emailData['references'])) {
+
+                if (! empty($emailData['references'])) {
                     $referencesHeader = new \Microsoft\Graph\Generated\Models\InternetMessageHeader;
                     $referencesHeader->setName('References');
-                    $referencesHeader->setValue('<' . $emailData['references'] . '>');
+                    $referencesHeader->setValue('<'.$emailData['references'].'>');
                     $headers[] = $referencesHeader;
                 }
-                
+
                 $message->setInternetMessageHeaders($headers);
             }
 
@@ -343,9 +343,9 @@ class OutlookService implements EmailProviderInterface
                 $toRecipients[] = $recipient;
             }
             $message->setToRecipients($toRecipients);
-            
+
             // Set CC recipients if present
-            if (!empty($emailData['cc'])) {
+            if (! empty($emailData['cc'])) {
                 $ccRecipients = [];
                 $ccAddresses = explode(',', $emailData['cc']);
                 foreach ($ccAddresses as $address) {
@@ -357,9 +357,9 @@ class OutlookService implements EmailProviderInterface
                 }
                 $message->setCcRecipients($ccRecipients);
             }
-            
+
             // Set BCC recipients if present
-            if (!empty($emailData['bcc'])) {
+            if (! empty($emailData['bcc'])) {
                 $bccRecipients = [];
                 $bccAddresses = explode(',', $emailData['bcc']);
                 foreach ($bccAddresses as $address) {
@@ -461,7 +461,7 @@ class OutlookService implements EmailProviderInterface
             return null;
         }
     }
-    
+
     public function processSingleEmail(string $messageId, array $options = []): ?array
     {
         if (! $this->isAuthenticated()) {
@@ -470,7 +470,7 @@ class OutlookService implements EmailProviderInterface
 
         try {
             $message = $this->graphClient->me()->messages()->byMessageId($messageId)->get()->wait();
-            
+
             return [
                 'message_id' => $message->getId(),
                 'thread_id' => $message->getConversationId(),
@@ -486,7 +486,7 @@ class OutlookService implements EmailProviderInterface
                 'message_id' => $messageId,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return null;
         }
     }

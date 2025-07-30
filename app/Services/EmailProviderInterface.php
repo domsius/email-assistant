@@ -43,7 +43,7 @@ interface EmailProviderInterface
      * Save a draft in the email provider
      */
     public function saveDraft(string $to, string $subject, string $body, ?string $inReplyTo = null, ?string $threadId = null): ?string;
-    
+
     /**
      * Process a single email by its message ID
      */

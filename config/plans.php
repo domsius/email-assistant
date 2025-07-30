@@ -57,6 +57,6 @@ return [
             ],
         ],
     ],
-    
+
     'default_plan' => 'free',
 ];

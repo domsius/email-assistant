@@ -171,13 +171,13 @@ class EmailSyncService extends BaseService
         $bodyContent = $emailData['body_content'] ?? '';
         $bodyHtml = $emailData['body_html'] ?? null;
         $snippet = substr(strip_tags($bodyContent), 0, 150);
-        
+
         Log::info('=== EmailSync: Processing email for storage ===', [
             'message_id' => $emailData['message_id'],
             'subject' => $emailData['subject'],
-            'has_body_content' => !empty($bodyContent),
+            'has_body_content' => ! empty($bodyContent),
             'body_content_length' => strlen($bodyContent),
-            'has_body_html' => !empty($bodyHtml),
+            'has_body_html' => ! empty($bodyHtml),
             'body_html_length' => strlen($bodyHtml ?? ''),
             'html_has_styles' => str_contains($bodyHtml ?? '', '<style'),
         ]);
@@ -201,15 +201,15 @@ class EmailSyncService extends BaseService
             'processing_status' => 'pending',
             'labels' => $emailData['provider_data']['labels'] ?? [],
         ]);
-        
+
         // Log what was actually saved
         Log::info('=== EmailSync: Email saved to database ===', [
             'email_id' => $emailMessage->id,
-            'has_body_content' => !empty($emailMessage->body_content),
+            'has_body_content' => ! empty($emailMessage->body_content),
             'body_content_length' => strlen($emailMessage->body_content ?? ''),
-            'has_body_html' => !empty($emailMessage->body_html),
+            'has_body_html' => ! empty($emailMessage->body_html),
             'body_html_length' => strlen($emailMessage->body_html ?? ''),
-            'has_body_plain' => !empty($emailMessage->body_plain),
+            'has_body_plain' => ! empty($emailMessage->body_plain),
         ]);
 
         // Dispatch job to process email through AI pipeline (if configured)
@@ -279,7 +279,7 @@ class EmailSyncService extends BaseService
             'is_authenticated' => $this->providerFactory->createProvider($emailAccount)->isAuthenticated(),
         ];
     }
-    
+
     /**
      * Optimized sync emails using batch ID fetching and individual job processing
      */
@@ -299,51 +299,51 @@ class EmailSyncService extends BaseService
             // For Gmail, use the optimized batch ID fetching
             if ($provider instanceof GmailService && method_exists($provider, 'fetchEmailIds')) {
                 $result = $provider->fetchEmailIds($limit, $pageToken, $fetchAll);
-                
-                if (!$result['success']) {
+
+                if (! $result['success']) {
                     throw new Exception('Failed to fetch email IDs');
                 }
-                
+
                 $messageIds = $result['ids'];
                 $nextPageToken = $result['next_page_token'];
-                
+
                 // Check which emails already exist
                 $existingMessageIds = EmailMessage::where('email_account_id', $emailAccount->id)
                     ->whereIn('message_id', $messageIds)
                     ->pluck('message_id')
                     ->toArray();
-                
+
                 // Filter out existing emails
                 $newMessageIds = array_diff($messageIds, $existingMessageIds);
-                
+
                 // Dispatch individual jobs for new emails
                 foreach ($newMessageIds as $messageId) {
                     ProcessSingleEmailJob::dispatch($emailAccount, $messageId)
                         ->onQueue('emails');
                 }
-                
+
                 Log::info('Dispatched email processing jobs', [
                     'email_account_id' => $emailAccount->id,
                     'total_fetched' => count($messageIds),
                     'new_emails' => count($newMessageIds),
                     'skipped' => count($existingMessageIds),
                 ]);
-                
+
                 // Update last sync timestamp
                 $emailAccount->update(['last_sync_at' => now()]);
-                
+
                 return [
                     'success' => true,
                     'processed' => count($newMessageIds),
                     'skipped' => count($existingMessageIds),
                     'next_page_token' => $nextPageToken,
-                    'has_more' => !empty($nextPageToken),
+                    'has_more' => ! empty($nextPageToken),
                 ];
             } else {
                 // Fall back to the original sync method for other providers
                 return $this->syncEmails($emailAccount, $options);
             }
-            
+
         } catch (Exception $e) {
             Log::error('Optimized email sync failed', [
                 'email_account_id' => $emailAccount->id,

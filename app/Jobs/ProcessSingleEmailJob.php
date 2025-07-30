@@ -2,9 +2,8 @@
 
 namespace App\Jobs;
 
-use App\Jobs\ProcessIncomingEmail;
-use App\Models\EmailAccount;
 use App\Models\Customer;
+use App\Models\EmailAccount;
 use App\Models\EmailMessage;
 use App\Services\EmailProviderFactory;
 use Illuminate\Bus\Queueable;
@@ -56,24 +55,25 @@ class ProcessSingleEmailJob implements ShouldQueue
             $existingEmail = EmailMessage::where('message_id', $this->messageId)
                 ->where('email_account_id', $this->emailAccount->id)
                 ->first();
-                
+
             if ($existingEmail) {
                 Log::info('Email already exists, skipping', [
                     'account_id' => $this->emailAccount->id,
                     'message_id' => $this->messageId,
                 ]);
+
                 return;
             }
-            
+
             $provider = $providerFactory->createProvider($this->emailAccount);
-            
+
             // Process the single email
             $emailData = $provider->processSingleEmail($this->messageId, $this->options);
-            
-            if (!$emailData) {
+
+            if (! $emailData) {
                 throw new \Exception('Failed to fetch email data from provider');
             }
-            
+
             // Find or create customer
             $customer = Customer::firstOrCreate(
                 [
@@ -86,17 +86,17 @@ class ProcessSingleEmailJob implements ShouldQueue
                     'journey_stage' => 'initial',
                 ]
             );
-            
+
             // Parse received date
-            $receivedAt = isset($emailData['date']) 
-                ? \Carbon\Carbon::parse($emailData['date']) 
+            $receivedAt = isset($emailData['date'])
+                ? \Carbon\Carbon::parse($emailData['date'])
                 : now();
-            
+
             // Create email message
             $bodyContent = $emailData['body_content'] ?? $emailData['body_html'] ?? '';
             $bodyHtml = $emailData['body_html'] ?? null;
             $snippet = substr(strip_tags($bodyContent), 0, 150);
-            
+
             $emailMessage = EmailMessage::create([
                 'email_account_id' => $this->emailAccount->id,
                 'customer_id' => $customer->id,
@@ -116,13 +116,13 @@ class ProcessSingleEmailJob implements ShouldQueue
                 'processing_status' => 'pending',
                 'labels' => $emailData['labels'] ?? [],
             ]);
-            
+
             Log::info('Successfully processed and saved email', [
                 'account_id' => $this->emailAccount->id,
                 'message_id' => $this->messageId,
                 'email_id' => $emailMessage->id,
             ]);
-            
+
             // Dispatch AI processing job if enabled
             if (config('email-processing.auto_process_incoming', false)) {
                 ProcessIncomingEmail::dispatch($emailMessage);
@@ -133,7 +133,7 @@ class ProcessSingleEmailJob implements ShouldQueue
                 'message_id' => $this->messageId,
                 'error' => $e->getMessage(),
             ]);
-            
+
             throw $e; // Re-throw to mark job as failed
         }
     }

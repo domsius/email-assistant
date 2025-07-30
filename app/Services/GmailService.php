@@ -8,7 +8,6 @@ use Google\Client as GoogleClient;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 
 class GmailService implements EmailProviderInterface
 {
@@ -120,7 +119,7 @@ class GmailService implements EmailProviderInterface
         }
     }
 
-    public function fetchEmails(int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
+    public function fetchEmails(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
     {
         try {
             if (! $this->isAuthenticated()) {
@@ -144,15 +143,15 @@ class GmailService implements EmailProviderInterface
 
                 // Build base query
                 $query = 'in:inbox';
-                
+
                 // Limit is now handled by maxResults parameter
                 // No date filter - fetching most recent emails up to the limit
-                
+
                 // Add unread filter if not fetching all
-                if (!$fetchAll) {
+                if (! $fetchAll) {
                     $query .= ' is:unread';
                 }
-                
+
                 $params['q'] = $query;
 
                 if ($currentPageToken) {
@@ -262,10 +261,10 @@ class GmailService implements EmailProviderInterface
     {
         $plainBody = '';
         $htmlBody = '';
-        
+
         Log::info('=== Gmail: Extracting body from payload ===', [
             'mime_type' => $payload->getMimeType(),
-            'has_parts' => !empty($payload->getParts()),
+            'has_parts' => ! empty($payload->getParts()),
             'parts_count' => $payload->getParts() ? count($payload->getParts()) : 0,
         ]);
 
@@ -313,11 +312,11 @@ class GmailService implements EmailProviderInterface
         if ($htmlBody && ! $plainBody) {
             $plainBody = strip_tags($htmlBody);
         }
-        
+
         Log::info('=== Gmail: Final extracted content ===', [
-            'has_html' => !empty($htmlBody),
+            'has_html' => ! empty($htmlBody),
             'html_length' => strlen($htmlBody),
-            'has_plain' => !empty($plainBody),
+            'has_plain' => ! empty($plainBody),
             'plain_length' => strlen($plainBody),
             'html_has_styles' => str_contains($htmlBody, '<style'),
         ]);
@@ -389,17 +388,17 @@ class GmailService implements EmailProviderInterface
         $headers = [];
         $headers[] = "From: {$fromName} <{$fromEmail}>";
         $headers[] = "To: {$to}";
-        
+
         // Add CC recipients if present
-        if (!empty($emailData['cc'])) {
+        if (! empty($emailData['cc'])) {
             $headers[] = "Cc: {$emailData['cc']}";
         }
-        
-        // Add BCC recipients if present  
-        if (!empty($emailData['bcc'])) {
+
+        // Add BCC recipients if present
+        if (! empty($emailData['bcc'])) {
             $headers[] = "Bcc: {$emailData['bcc']}";
         }
-        
+
         $headers[] = "Subject: {$subject}";
         $headers[] = 'MIME-Version: 1.0';
         $headers[] = 'Content-Type: text/plain; charset=utf-8';
@@ -506,11 +505,11 @@ class GmailService implements EmailProviderInterface
     {
         return $this->nextPageToken;
     }
-    
+
     /**
      * Fetch email IDs only (for batch processing)
      */
-    public function fetchEmailIds(int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
+    public function fetchEmailIds(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
     {
         if (! $this->isAuthenticated()) {
             return ['ids' => [], 'next_page_token' => null, 'success' => false];
@@ -526,15 +525,15 @@ class GmailService implements EmailProviderInterface
 
             // Build base query
             $query = 'in:inbox';
-            
+
             // Limit is now handled by maxResults parameter
-                // No date filter - fetching most recent emails up to the limit
-            
+            // No date filter - fetching most recent emails up to the limit
+
             // Add unread filter if not fetching all
-            if (!$fetchAll) {
+            if (! $fetchAll) {
                 $query .= ' is:unread';
             }
-            
+
             $params['q'] = $query;
 
             if ($pageToken) {
@@ -544,7 +543,7 @@ class GmailService implements EmailProviderInterface
             // Get list of messages
             $response = $this->gmail->users_messages->listUsersMessages('me', $params);
             $messages = $response->getMessages() ?? [];
-            
+
             $messageIds = [];
             foreach ($messages as $message) {
                 $messageIds[] = $message->getId();
@@ -562,11 +561,11 @@ class GmailService implements EmailProviderInterface
             ];
         } catch (Exception $e) {
             Log::error('Failed to fetch Gmail message IDs: '.$e->getMessage());
-            
+
             return ['ids' => [], 'next_page_token' => null, 'success' => false];
         }
     }
-    
+
     public function processSingleEmail(string $messageId, array $options = []): ?array
     {
         if (! $this->isAuthenticated()) {
@@ -575,13 +574,14 @@ class GmailService implements EmailProviderInterface
 
         try {
             $message = $this->gmail->users_messages->get('me', $messageId);
+
             return $this->processGmailMessage($message);
         } catch (\Exception $e) {
             Log::error('Failed to process single email', [
                 'message_id' => $messageId,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return null;
         }
     }

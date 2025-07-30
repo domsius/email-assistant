@@ -280,7 +280,7 @@ class ComposeController extends Controller
             ->where('is_active', true)
             ->first();
 
-        if (!$emailAccount) {
+        if (! $emailAccount) {
             return response()->json(['error' => 'Email account not found or inactive'], 404);
         }
 
@@ -321,14 +321,14 @@ class ComposeController extends Controller
     {
         $addresses = [];
         $parts = preg_split('/[,;]/', $emails);
-        
+
         foreach ($parts as $email) {
             $email = trim($email);
             if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $addresses[] = $email;
             }
         }
-        
+
         return $addresses;
     }
 }

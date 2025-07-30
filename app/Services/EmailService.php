@@ -490,6 +490,46 @@ class EmailService
     }
 
     /**
+     * Mark emails as not spam (move from spam to inbox)
+     */
+    public function markAsNotSpam(array $emailIds, int $companyId): array
+    {
+        try {
+            if (empty($emailIds)) {
+                return [
+                    'success' => false,
+                    'message' => 'No emails selected',
+                ];
+            }
+
+            $count = $this->emailRepository->markAsNotSpam($emailIds, $companyId);
+
+            if ($count === 0) {
+                return [
+                    'success' => false,
+                    'message' => 'No emails found or unauthorized',
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => "{$count} email(s) moved to inbox",
+            ];
+        } catch (\Exception $e) {
+            Log::error('Failed to mark emails as not spam', [
+                'email_ids' => $emailIds,
+                'company_id' => $companyId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Failed to mark emails as not spam',
+            ];
+        }
+    }
+
+    /**
      * Delete emails (move to trash)
      */
     public function deleteEmails(array $emailIds, int $companyId): array
@@ -652,6 +692,87 @@ class EmailService
             return [
                 'success' => false,
                 'message' => 'Failed to restore emails',
+            ];
+        }
+    }
+
+    /**
+     * Permanently delete emails (hard delete from database)
+     */
+    public function permanentDelete(array $emailIds, int $companyId): array
+    {
+        try {
+            if (empty($emailIds)) {
+                return [
+                    'success' => false,
+                    'message' => 'No emails selected',
+                ];
+            }
+
+            // Separate draft IDs from regular email IDs
+            $draftIds = [];
+            $regularEmailIds = [];
+
+            foreach ($emailIds as $id) {
+                if (is_string($id) && str_starts_with($id, 'draft-')) {
+                    // Extract numeric draft ID
+                    $draftIds[] = (int) substr($id, 6);
+                } else {
+                    $regularEmailIds[] = $id;
+                }
+            }
+
+            $deletedCount = 0;
+            $messages = [];
+
+            // Permanently delete drafts
+            if (! empty($draftIds)) {
+                $user = auth()->user();
+                $deletedDrafts = EmailDraft::whereIn('id', $draftIds)
+                    ->where('user_id', $user->id)
+                    ->forceDelete();
+
+                $deletedCount += $deletedDrafts;
+                if ($deletedDrafts > 0) {
+                    $messages[] = "{$deletedDrafts} draft(s) permanently deleted";
+                }
+            }
+
+            // Permanently delete regular emails
+            if (! empty($regularEmailIds)) {
+                $deletedEmails = $this->emailRepository->permanentDelete($regularEmailIds, $companyId);
+                $deletedCount += $deletedEmails;
+                if ($deletedEmails > 0) {
+                    $messages[] = "{$deletedEmails} email(s) permanently deleted";
+                }
+            }
+
+            $count = $deletedCount;
+
+            if ($count === 0) {
+                return [
+                    'success' => false,
+                    'message' => 'No emails found or unauthorized',
+                ];
+            }
+
+            // Combine messages for user feedback
+            $message = ! empty($messages) ? implode(' and ', $messages) : "{$count} item(s) permanently deleted";
+
+            return [
+                'success' => true,
+                'message' => $message,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Failed to permanently delete emails', [
+                'email_ids' => $emailIds,
+                'company_id' => $companyId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Failed to permanently delete emails',
             ];
         }
     }

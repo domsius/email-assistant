@@ -16,7 +16,7 @@ return new class extends Migration
             $table->json('to_recipients')->nullable()->after('sender_name');
             $table->json('cc_recipients')->nullable()->after('to_recipients');
             $table->json('bcc_recipients')->nullable()->after('cc_recipients');
-            
+
             // Add threading fields for replies
             $table->string('in_reply_to')->nullable()->after('thread_id');
             $table->text('references')->nullable()->after('in_reply_to');

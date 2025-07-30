@@ -28,7 +28,7 @@ class SyncEmailAccountJob implements ShouldQueue
      * @var int
      */
     public $timeout = 1200; // 20 minutes
-    
+
     /**
      * The maximum number of unhandled exceptions to allow before failing.
      *
@@ -106,7 +106,7 @@ class SyncEmailAccountJob implements ShouldQueue
     {
         return [60, 300, 600]; // 1 minute, 5 minutes, 10 minutes
     }
-    
+
     /**
      * Handle a job failure.
      */

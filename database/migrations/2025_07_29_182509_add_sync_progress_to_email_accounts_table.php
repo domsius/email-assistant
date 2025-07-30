@@ -33,7 +33,7 @@ return new class extends Migration
                 'sync_total',
                 'sync_error',
                 'sync_started_at',
-                'sync_completed_at'
+                'sync_completed_at',
             ]);
         });
     }

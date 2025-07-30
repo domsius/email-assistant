@@ -48,6 +48,8 @@ interface InboxActions {
   handleRestore: () => void;
   handleDelete: () => void;
   handleMoveToSpam: () => void;
+  handleNotSpam: () => void;
+  handlePermanentDelete: () => void;
   handleToggleStar: (emailId: number | string) => void;
   handleToggleRead: (emailId: number | string) => void;
   handleSync: (selectedAccount: number | null) => void;
@@ -398,6 +400,80 @@ export function InboxProvider({
     }
   }, [state.selectedEmails, reloadWithCurrentParams]);
 
+  const handleNotSpam = useCallback(() => {
+    if (state.selectedEmails.length > 0) {
+      setState((prev) => ({ ...prev, isLoading: true }));
+      const emailCount = state.selectedEmails.length;
+      router.post(
+        "/emails/not-spam",
+        {
+          emailIds: state.selectedEmails,
+        },
+        {
+          preserveScroll: true,
+          onSuccess: () => {
+            setState((prev) => ({
+              ...prev,
+              selectedEmails: [],
+              isLoading: false,
+            }));
+            toast.success(
+              `${emailCount} email${emailCount > 1 ? "s" : ""} moved to inbox`,
+              {
+                action: {
+                  label: "View Inbox",
+                  onClick: () => {
+                    router.get("/inbox");
+                  },
+                },
+                duration: 5000,
+              },
+            );
+            reloadWithCurrentParams(["emails", "folders"]);
+          },
+          onError: () => {
+            setState((prev) => ({ ...prev, isLoading: false }));
+            toast.error("Failed to move emails from spam");
+          },
+        },
+      );
+    }
+  }, [state.selectedEmails, reloadWithCurrentParams]);
+
+  const handlePermanentDelete = useCallback(() => {
+    if (state.selectedEmails.length > 0) {
+      setState((prev) => ({ ...prev, isLoading: true }));
+      const emailCount = state.selectedEmails.length;
+      router.post(
+        "/emails/permanent-delete",
+        {
+          emailIds: state.selectedEmails,
+        },
+        {
+          preserveScroll: true,
+          onSuccess: () => {
+            setState((prev) => ({
+              ...prev,
+              selectedEmails: [],
+              isLoading: false,
+            }));
+            toast.success(
+              `${emailCount} email${emailCount > 1 ? "s" : ""} permanently deleted`,
+              {
+                duration: 5000,
+              },
+            );
+            reloadWithCurrentParams(["emails", "folders"]);
+          },
+          onError: () => {
+            setState((prev) => ({ ...prev, isLoading: false }));
+            toast.error("Failed to permanently delete emails");
+          },
+        },
+      );
+    }
+  }, [state.selectedEmails, reloadWithCurrentParams]);
+
   const handleToggleStar = useCallback((emailId: number | string) => {
     setState((prev) => ({ ...prev, isLoading: true }));
     router.post(
@@ -414,7 +490,7 @@ export function InboxProvider({
         },
       },
     );
-  }, []);
+  }, [reloadWithCurrentParams]);
 
   const handleToggleRead = useCallback((emailId: number | string) => {
     setState((prev) => ({ ...prev, isLoading: true }));
@@ -432,7 +508,7 @@ export function InboxProvider({
         },
       },
     );
-  }, []);
+  }, [reloadWithCurrentParams]);
 
   const handleSync = useCallback((selectedAccount: number | null) => {
     setState((prev) => ({ ...prev, isLoading: true }));
@@ -495,6 +571,8 @@ export function InboxProvider({
     handleRestore,
     handleDelete,
     handleMoveToSpam,
+    handleNotSpam,
+    handlePermanentDelete,
     handleToggleStar,
     handleToggleRead,
     handleSync,

@@ -117,6 +117,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/emails/spam', [\App\Http\Controllers\EmailOperationsController::class, 'moveToSpam'])->name('emails.spam');
 
+    Route::post('/emails/not-spam', [\App\Http\Controllers\EmailOperationsController::class, 'notSpam'])->name('emails.not-spam');
+
     Route::post('/emails/delete', [\App\Http\Controllers\EmailOperationsController::class, 'delete'])->name('emails.delete');
 
     Route::post('/emails/{emailId}/toggle-read', [\App\Http\Controllers\EmailOperationsController::class, 'toggleRead'])->name('emails.toggle-read');
@@ -124,6 +126,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/emails/unarchive', [\App\Http\Controllers\EmailOperationsController::class, 'unarchive'])->name('emails.unarchive');
 
     Route::post('/emails/restore', [\App\Http\Controllers\EmailOperationsController::class, 'restore'])->name('emails.restore');
+
+    Route::post('/emails/permanent-delete', [\App\Http\Controllers\EmailOperationsController::class, 'permanentDelete'])->name('emails.permanent-delete');
 
     Route::post('/emails/{emailId}/toggle-star', [\App\Http\Controllers\EmailOperationsController::class, 'toggleStar'])->name('emails.toggle-star');
 

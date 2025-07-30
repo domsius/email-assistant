@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Models\Company;
+use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,12 +39,12 @@ class RegisteredUserController extends Controller
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'company_name' => 'required|string|max:255',
-            'plan' => 'required|string|in:' . implode(',', array_keys(config('plans.plans'))),
+            'plan' => 'required|string|in:'.implode(',', array_keys(config('plans.plans'))),
         ]);
 
         DB::transaction(function () use ($request, &$user) {
             // Create the company first
-            $planConfig = config('plans.plans.' . $request->plan);
+            $planConfig = config('plans.plans.'.$request->plan);
             $company = Company::create([
                 'name' => $request->company_name,
                 'plan' => $request->plan,
