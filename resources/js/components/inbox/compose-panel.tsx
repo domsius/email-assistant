@@ -21,6 +21,8 @@ import {
   Smile,
   MoreHorizontal,
   Sparkles,
+  Eye,
+  Pencil,
 } from "lucide-react";
 import { useInbox } from "@/contexts/inbox-context";
 
@@ -60,6 +62,7 @@ export function ComposePanel({
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [formData, setFormData] = useState({
     to: composeData.to,
     cc: composeData.cc,
@@ -172,13 +175,13 @@ export function ComposePanel({
       let formattedText = '';
       switch (format) {
         case 'bold':
-          formattedText = `**${selectedText}**`;
+          formattedText = `<strong>${selectedText}</strong>`;
           break;
         case 'italic':
-          formattedText = `*${selectedText}*`;
+          formattedText = `<em>${selectedText}</em>`;
           break;
         case 'underline':
-          formattedText = `__${selectedText}__`;
+          formattedText = `<u>${selectedText}</u>`;
           break;
       }
 
@@ -192,27 +195,31 @@ export function ComposePanel({
         textarea.setSelectionRange(newCursorPos, newCursorPos);
       }, 0);
     } else {
-      // If no text is selected, insert formatting markers at cursor position
-      let markers = '';
+      // If no text is selected, insert formatting tags at cursor position
+      let tags = '';
+      let tagLength = 0;
       switch (format) {
         case 'bold':
-          markers = '****';
+          tags = '<strong></strong>';
+          tagLength = 8; // length of <strong>
           break;
         case 'italic':
-          markers = '**';
+          tags = '<em></em>';
+          tagLength = 4; // length of <em>
           break;
         case 'underline':
-          markers = '____';
+          tags = '<u></u>';
+          tagLength = 3; // length of <u>
           break;
       }
 
-      const newBody = formData.body.substring(0, start) + markers + formData.body.substring(start);
+      const newBody = formData.body.substring(0, start) + tags + formData.body.substring(start);
       handleFormChange('body', newBody);
 
-      // Place cursor in the middle of the markers
+      // Place cursor inside the tags
       setTimeout(() => {
         textarea.focus();
-        const cursorPos = start + markers.length / 2;
+        const cursorPos = start + tagLength;
         textarea.setSelectionRange(cursorPos, cursorPos);
       }, 0);
     }
@@ -508,13 +515,23 @@ export function ComposePanel({
 
           {/* Body */}
           <div className="flex-1 px-6 py-4">
-            <Textarea
-              ref={bodyRef}
-              placeholder="Write your message..."
-              value={formData.body}
-              onChange={(e) => handleFormChange("body", e.target.value)}
-              className="min-h-[300px] h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0 font-mono"
-            />
+            {showPreview ? (
+              <div className="min-h-[300px] h-full p-0">
+                <div className="mb-2 text-sm text-muted-foreground">Preview Mode</div>
+                <div 
+                  className="prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: formData.body }}
+                />
+              </div>
+            ) : (
+              <Textarea
+                ref={bodyRef}
+                placeholder="Write your message..."
+                value={formData.body}
+                onChange={(e) => handleFormChange("body", e.target.value)}
+                className="min-h-[300px] h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0"
+              />
+            )}
           </div>
 
           {/* Original Email Preview */}
@@ -588,6 +605,27 @@ export function ComposePanel({
                     <Smile className="h-4 w-4" />
                   </Button>
                 </div>
+                <Separator orientation="vertical" className="mx-1 h-6" />
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 px-2 gap-1" 
+                  title="Toggle preview"
+                  onClick={() => setShowPreview(!showPreview)}
+                  type="button"
+                >
+                  {showPreview ? (
+                    <>
+                      <Pencil className="h-4 w-4" />
+                      <span className="text-xs">Edit</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4" />
+                      <span className="text-xs">Preview</span>
+                    </>
+                  )}
+                </Button>
                 {originalEmail && (composeData.action === "reply" || composeData.action === "replyAll") && (
                   <>
                     <Separator orientation="vertical" className="mx-1 h-6" />
