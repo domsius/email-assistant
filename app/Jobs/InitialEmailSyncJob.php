@@ -35,7 +35,7 @@ class InitialEmailSyncJob implements ShouldQueue
      *
      * @var int
      */
-    private $maxInitialSync = 500;
+    private $maxInitialSync;
 
     /**
      * Create a new job instance.
@@ -49,6 +49,8 @@ class InitialEmailSyncJob implements ShouldQueue
      */
     public function handle(EmailSyncService $syncService, EmailProviderFactory $providerFactory): void
     {
+        // Set max initial sync from config
+        $this->maxInitialSync = config('mail-sync.sync_email_limit', 200);
         Log::info('Starting initial email sync', [
             'account_id' => $this->emailAccount->id,
             'email' => $this->emailAccount->email_address,

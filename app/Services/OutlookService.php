@@ -171,12 +171,15 @@ class OutlookService implements EmailProviderInterface
         }
     }
 
-    public function fetchEmails(int $limit = 50, ?string $pageToken = null, bool $fetchAll = false): array
+    public function fetchEmails(int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
     {
         try {
             if (! $this->isAuthenticated() || ! $this->graphClient) {
                 throw new Exception('Outlook account not authenticated');
             }
+
+            // Use config value if limit not specified
+            $limit = $limit ?? config('mail-sync.sync_email_limit', 200);
 
             $emails = [];
 
@@ -187,10 +190,8 @@ class OutlookService implements EmailProviderInterface
             // Build filter query
             $filters = [];
             
-            // Add date filter based on config
-            $syncDaysLimit = config('mail-sync.sync_days_limit', 7);
-            $dateFilter = Carbon::now()->subDays($syncDaysLimit)->toIso8601String();
-            $filters[] = "receivedDateTime ge {$dateFilter}";
+            // No date filter - fetching most recent emails up to the limit
+            // Emails will be ordered by receivedDateTime desc
             
             // Add unread filter if not fetching all
             if (!$fetchAll) {

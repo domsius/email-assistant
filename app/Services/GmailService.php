@@ -120,12 +120,15 @@ class GmailService implements EmailProviderInterface
         }
     }
 
-    public function fetchEmails(int $limit = 500, ?string $pageToken = null, bool $fetchAll = false): array
+    public function fetchEmails(int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
     {
         try {
             if (! $this->isAuthenticated()) {
                 throw new Exception('Gmail account not authenticated');
             }
+
+            // Use config value if limit not specified
+            $limit = $limit ?? config('mail-sync.sync_email_limit', 200);
 
             $emails = [];
             $batchSize = 100; // Gmail API limit per request
@@ -142,10 +145,8 @@ class GmailService implements EmailProviderInterface
                 // Build base query
                 $query = 'in:inbox';
                 
-                // Add date filter based on config
-                $syncDaysLimit = config('mail-sync.sync_days_limit', 7);
-                $dateFilter = Carbon::now()->subDays($syncDaysLimit)->format('Y/m/d');
-                $query .= ' after:' . $dateFilter;
+                // Limit is now handled by maxResults parameter
+                // No date filter - fetching most recent emails up to the limit
                 
                 // Add unread filter if not fetching all
                 if (!$fetchAll) {
@@ -509,13 +510,15 @@ class GmailService implements EmailProviderInterface
     /**
      * Fetch email IDs only (for batch processing)
      */
-    public function fetchEmailIds(int $limit = 50, ?string $pageToken = null, bool $fetchAll = false): array
+    public function fetchEmailIds(int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
     {
         if (! $this->isAuthenticated()) {
             return ['ids' => [], 'next_page_token' => null, 'success' => false];
         }
 
         try {
+            // Use config value if limit not specified
+            $limit = $limit ?? config('mail-sync.sync_email_limit', 200);
             $params = [
                 'maxResults' => min($limit, 100),
                 'includeSpamTrash' => false,
@@ -524,10 +527,8 @@ class GmailService implements EmailProviderInterface
             // Build base query
             $query = 'in:inbox';
             
-            // Add date filter based on config
-            $syncDaysLimit = config('mail-sync.sync_days_limit', 7);
-            $dateFilter = Carbon::now()->subDays($syncDaysLimit)->format('Y/m/d');
-            $query .= ' after:' . $dateFilter;
+            // Limit is now handled by maxResults parameter
+                // No date filter - fetching most recent emails up to the limit
             
             // Add unread filter if not fetching all
             if (!$fetchAll) {
