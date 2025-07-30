@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
+import { router } from "@inertiajs/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +50,7 @@ export function ComposePanel({
   originalEmail,
   draftId: initialDraftId,
 }: ComposePanelProps) {
-  const { exitComposeMode } = useInbox();
+  const { exitComposeMode, selectedAccount } = useInbox();
   const [showCc, setShowCc] = useState(!!composeData.cc);
   const [showBcc, setShowBcc] = useState(!!composeData.bcc);
   const [isSending, setIsSending] = useState(false);
@@ -157,9 +158,9 @@ export function ComposePanel({
     };
   }, [formData, saveDraft, hasUnsavedChanges]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!formData.to && !formData.cc && !formData.bcc) {
-      alert("Please add at least one recipient");
+      toast.error("Please add at least one recipient");
       return;
     }
 
@@ -168,20 +169,69 @@ export function ComposePanel({
         return;
       }
     }
+    
+    if (!selectedAccount) {
+      toast.error("Please select an email account");
+      return;
+    }
 
     setIsSending(true);
 
-    // TODO: Implement actual send functionality
-    console.log("Sending email:", {
-      ...formData,
-      inReplyTo: composeData.inReplyTo,
-      references: composeData.references,
+    router.post('/emails/send', {
+      emailAccountId: selectedAccount,
+      to: formData.to,
+      cc: formData.cc || '',
+      bcc: formData.bcc || '',
+      subject: formData.subject || '(No Subject)',
+      body: formData.body,
+      draftId: draftId,
+      inReplyTo: composeData.inReplyTo || null,
+      references: composeData.references || null,
+    }, {
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: () => {
+        toast.success("Email sent successfully");
+        
+        // Clear form and exit compose mode
+        setFormData({
+          to: '',
+          cc: '',
+          bcc: '',
+          subject: '',
+          body: '',
+        });
+        
+        // Navigate to sent folder - this will also refresh the email list
+        router.visit('/inbox?folder=sent', {
+          preserveState: false,
+          preserveScroll: true,
+          only: ['emails', 'folders'],
+        });
+        
+        // Exit compose mode
+        exitComposeMode();
+      },
+      onError: (errors) => {
+        // Handle validation errors
+        if (errors.to) {
+          toast.error(errors.to);
+        } else if (errors.body) {
+          toast.error(errors.body);
+        } else if (errors.emailAccountId) {
+          toast.error(errors.emailAccountId);
+        } else {
+          // General error message
+          const errorMessage = typeof errors === 'object' 
+            ? Object.values(errors).flat().join(' ')
+            : 'Failed to send email';
+          toast.error(errorMessage);
+        }
+      },
+      onFinish: () => {
+        setIsSending(false);
+      },
     });
-
-    // For now, just exit compose mode
-    setTimeout(() => {
-      exitComposeMode();
-    }, 1000);
   };
 
   const handleCancel = () => {

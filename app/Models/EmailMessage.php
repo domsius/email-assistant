@@ -52,6 +52,11 @@ class EmailMessage extends Model
         'has_attachments',
         'is_reply',
         'replied_to_message_id',
+        'to_recipients',
+        'cc_recipients',
+        'bcc_recipients',
+        'in_reply_to',
+        'references',
     ];
 
     protected $casts = [
@@ -62,6 +67,9 @@ class EmailMessage extends Model
         'snippet' => 'encrypted',
         'labels' => 'array',
         'ai_analysis' => 'array',
+        'to_recipients' => 'array',
+        'cc_recipients' => 'array',
+        'bcc_recipients' => 'array',
         'received_at' => 'datetime',
         'archived_at' => 'datetime',
         'spam_marked_at' => 'datetime',

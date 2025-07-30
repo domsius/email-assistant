@@ -8,6 +8,7 @@ use Google\Client as GoogleClient;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class GmailService implements EmailProviderInterface
 {
@@ -138,14 +139,20 @@ class GmailService implements EmailProviderInterface
                     'maxResults' => $requestLimit,
                 ];
 
-                // Set query based on whether we want all emails or just unread ones
-                if ($fetchAll) {
-                    // Fetch all emails from inbox
-                    $params['q'] = 'in:inbox';
-                } else {
-                    // Original behavior - only unread emails in inbox
-                    $params['q'] = 'in:inbox is:unread';
+                // Build base query
+                $query = 'in:inbox';
+                
+                // Add date filter based on config
+                $syncDaysLimit = config('mail-sync.sync_days_limit', 7);
+                $dateFilter = Carbon::now()->subDays($syncDaysLimit)->format('Y/m/d');
+                $query .= ' after:' . $dateFilter;
+                
+                // Add unread filter if not fetching all
+                if (!$fetchAll) {
+                    $query .= ' is:unread';
                 }
+                
+                $params['q'] = $query;
 
                 if ($currentPageToken) {
                     $params['pageToken'] = $currentPageToken;
@@ -381,6 +388,17 @@ class GmailService implements EmailProviderInterface
         $headers = [];
         $headers[] = "From: {$fromName} <{$fromEmail}>";
         $headers[] = "To: {$to}";
+        
+        // Add CC recipients if present
+        if (!empty($emailData['cc'])) {
+            $headers[] = "Cc: {$emailData['cc']}";
+        }
+        
+        // Add BCC recipients if present  
+        if (!empty($emailData['bcc'])) {
+            $headers[] = "Bcc: {$emailData['bcc']}";
+        }
+        
         $headers[] = "Subject: {$subject}";
         $headers[] = 'MIME-Version: 1.0';
         $headers[] = 'Content-Type: text/plain; charset=utf-8';
@@ -503,12 +521,20 @@ class GmailService implements EmailProviderInterface
                 'includeSpamTrash' => false,
             ];
 
-            // Set query based on whether we want all emails or just unread ones
-            if ($fetchAll) {
-                $params['q'] = 'in:inbox';
-            } else {
-                $params['q'] = 'in:inbox is:unread';
+            // Build base query
+            $query = 'in:inbox';
+            
+            // Add date filter based on config
+            $syncDaysLimit = config('mail-sync.sync_days_limit', 7);
+            $dateFilter = Carbon::now()->subDays($syncDaysLimit)->format('Y/m/d');
+            $query .= ' after:' . $dateFilter;
+            
+            // Add unread filter if not fetching all
+            if (!$fetchAll) {
+                $query .= ' is:unread';
             }
+            
+            $params['q'] = $query;
 
             if ($pageToken) {
                 $params['pageToken'] = $pageToken;

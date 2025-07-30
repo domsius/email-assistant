@@ -136,6 +136,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/drafts/save', [\App\Http\Controllers\ComposeController::class, 'saveDraft'])->name('drafts.save');
     Route::get('/drafts/{id}', [\App\Http\Controllers\ComposeController::class, 'getDraft'])->name('drafts.get');
     Route::delete('/drafts/{id}', [\App\Http\Controllers\ComposeController::class, 'deleteDraft'])->name('drafts.delete');
+    Route::post('/emails/send', [\App\Http\Controllers\ComposeController::class, 'send'])->name('emails.send');
 });
 
 require __DIR__.'/settings.php';

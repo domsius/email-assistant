@@ -184,11 +184,23 @@ class OutlookService implements EmailProviderInterface
             $requestConfig = new MessagesRequestBuilderGetRequestConfiguration;
             $requestConfig->queryParameters = new MessagesRequestBuilderGetQueryParameters;
 
-            // Set filter based on whether we want all emails or just unread ones
-            if (! $fetchAll) {
-                $requestConfig->queryParameters->filter = 'isRead eq false';
+            // Build filter query
+            $filters = [];
+            
+            // Add date filter based on config
+            $syncDaysLimit = config('mail-sync.sync_days_limit', 7);
+            $dateFilter = Carbon::now()->subDays($syncDaysLimit)->toIso8601String();
+            $filters[] = "receivedDateTime ge {$dateFilter}";
+            
+            // Add unread filter if not fetching all
+            if (!$fetchAll) {
+                $filters[] = 'isRead eq false';
             }
-            // If fetchAll is true, no filter is set, which fetches all emails
+            
+            // Combine filters with AND
+            if (!empty($filters)) {
+                $requestConfig->queryParameters->filter = implode(' and ', $filters);
+            }
 
             $requestConfig->queryParameters->orderby = ['receivedDateTime desc'];
             $requestConfig->queryParameters->top = $limit;
@@ -296,13 +308,68 @@ class OutlookService implements EmailProviderInterface
             $body->setContentType(new \Microsoft\Graph\Generated\Models\BodyType('text'));
             $body->setContent($emailData['body']);
             $message->setBody($body);
+            
+            // Set threading headers for replies
+            if (!empty($emailData['in_reply_to'])) {
+                // Note: Microsoft Graph API handles threading differently than traditional email headers
+                // The conversationId should be set if this is part of an existing conversation
+                // For now, we'll set the internetMessageHeaders
+                $headers = [];
+                
+                $inReplyToHeader = new \Microsoft\Graph\Generated\Models\InternetMessageHeader;
+                $inReplyToHeader->setName('In-Reply-To');
+                $inReplyToHeader->setValue('<' . $emailData['in_reply_to'] . '>');
+                $headers[] = $inReplyToHeader;
+                
+                if (!empty($emailData['references'])) {
+                    $referencesHeader = new \Microsoft\Graph\Generated\Models\InternetMessageHeader;
+                    $referencesHeader->setName('References');
+                    $referencesHeader->setValue('<' . $emailData['references'] . '>');
+                    $headers[] = $referencesHeader;
+                }
+                
+                $message->setInternetMessageHeaders($headers);
+            }
 
-            // Set recipient
-            $recipient = new \Microsoft\Graph\Generated\Models\Recipient;
-            $emailAddress = new \Microsoft\Graph\Generated\Models\EmailAddress;
-            $emailAddress->setAddress($emailData['to']);
-            $recipient->setEmailAddress($emailAddress);
-            $message->setToRecipients([$recipient]);
+            // Set TO recipients
+            $toRecipients = [];
+            $toAddresses = explode(',', $emailData['to']);
+            foreach ($toAddresses as $address) {
+                $recipient = new \Microsoft\Graph\Generated\Models\Recipient;
+                $emailAddress = new \Microsoft\Graph\Generated\Models\EmailAddress;
+                $emailAddress->setAddress(trim($address));
+                $recipient->setEmailAddress($emailAddress);
+                $toRecipients[] = $recipient;
+            }
+            $message->setToRecipients($toRecipients);
+            
+            // Set CC recipients if present
+            if (!empty($emailData['cc'])) {
+                $ccRecipients = [];
+                $ccAddresses = explode(',', $emailData['cc']);
+                foreach ($ccAddresses as $address) {
+                    $recipient = new \Microsoft\Graph\Generated\Models\Recipient;
+                    $emailAddress = new \Microsoft\Graph\Generated\Models\EmailAddress;
+                    $emailAddress->setAddress(trim($address));
+                    $recipient->setEmailAddress($emailAddress);
+                    $ccRecipients[] = $recipient;
+                }
+                $message->setCcRecipients($ccRecipients);
+            }
+            
+            // Set BCC recipients if present
+            if (!empty($emailData['bcc'])) {
+                $bccRecipients = [];
+                $bccAddresses = explode(',', $emailData['bcc']);
+                foreach ($bccAddresses as $address) {
+                    $recipient = new \Microsoft\Graph\Generated\Models\Recipient;
+                    $emailAddress = new \Microsoft\Graph\Generated\Models\EmailAddress;
+                    $emailAddress->setAddress(trim($address));
+                    $recipient->setEmailAddress($emailAddress);
+                    $bccRecipients[] = $recipient;
+                }
+                $message->setBccRecipients($bccRecipients);
+            }
 
             // Send the email
             $this->graphClient->me()->sendMail()->post(

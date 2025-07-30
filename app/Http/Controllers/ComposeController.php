@@ -253,4 +253,82 @@ class ComposeController extends Controller
 
         return response()->json(['message' => 'Draft deleted successfully']);
     }
+
+    /**
+     * Send an email
+     */
+    public function send(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'to' => 'required|string|max:500',
+            'cc' => 'nullable|string|max:500',
+            'bcc' => 'nullable|string|max:500',
+            'subject' => 'required|string|max:255',
+            'body' => 'required|string',
+            'emailAccountId' => 'required|integer|exists:email_accounts,id',
+            'draftId' => 'nullable|integer|exists:email_drafts,id',
+            'inReplyTo' => 'nullable|string',
+            'references' => 'nullable|string',
+            'originalEmailId' => 'nullable|integer|exists:email_messages,id',
+        ]);
+
+        $user = auth()->user();
+
+        // Verify the user owns the email account
+        $emailAccount = EmailAccount::where('id', $validated['emailAccountId'])
+            ->where('company_id', $user->company_id)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$emailAccount) {
+            return response()->json(['error' => 'Email account not found or inactive'], 404);
+        }
+
+        // Validate email addresses
+        $toEmails = $this->parseEmailAddresses($validated['to']);
+        $ccEmails = $validated['cc'] ? $this->parseEmailAddresses($validated['cc']) : [];
+        $bccEmails = $validated['bcc'] ? $this->parseEmailAddresses($validated['bcc']) : [];
+
+        if (empty($toEmails)) {
+            return response()->json(['error' => 'At least one valid recipient email address is required'], 422);
+        }
+
+        // Prepare email data for the job
+        $emailData = [
+            'to' => $toEmails,
+            'cc' => $ccEmails,
+            'bcc' => $bccEmails,
+            'subject' => $validated['subject'],
+            'body' => $validated['body'],
+            'inReplyTo' => $validated['inReplyTo'] ?? null,
+            'references' => $validated['references'] ?? null,
+            'originalEmailId' => $validated['originalEmailId'] ?? null,
+        ];
+
+        // Dispatch the send email job
+        \App\Jobs\SendEmailJob::dispatch($emailAccount, $emailData, $validated['draftId'] ?? null);
+
+        return response()->json([
+            'message' => 'Email queued for sending',
+            'status' => 'queued',
+        ]);
+    }
+
+    /**
+     * Parse and validate email addresses
+     */
+    private function parseEmailAddresses(string $emails): array
+    {
+        $addresses = [];
+        $parts = preg_split('/[,;]/', $emails);
+        
+        foreach ($parts as $email) {
+            $email = trim($email);
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $addresses[] = $email;
+            }
+        }
+        
+        return $addresses;
+    }
 }
