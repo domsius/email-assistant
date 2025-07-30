@@ -158,29 +158,11 @@ class EmailController extends Controller
             // Generate AI response
             $result = $this->aiResponseService->generateResponse($email, auth()->user());
 
-            // Store or update draft response
-            $draftResponse = $email->draftResponse()->updateOrCreate(
-                ['email_message_id' => $email->id],
-                [
-                    'user_id' => auth()->id(),
-                    'ai_generated_content' => $result['response'],
-                    'confidence_score' => $result['confidence'],
-                    'status' => 'draft',
-                    'metadata' => array_merge($result['metadata'], [
-                        'generation_params' => $validated,
-                    ]),
-                ]
-            );
-
+            // For now, return the response directly without saving as draft
             return response()->json([
-                'data' => [
-                    'draft' => $draftResponse,
-                    'metadata' => $result['metadata'],
-                ],
-                'meta' => [
-                    'status' => 'success',
-                    'confidence' => $result['confidence'],
-                ],
+                'response' => $result['response'],
+                'confidence' => $result['confidence'],
+                'metadata' => $result['metadata'],
             ]);
 
         } catch (\Exception $e) {

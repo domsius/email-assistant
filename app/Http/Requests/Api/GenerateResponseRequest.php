@@ -11,9 +11,25 @@ class GenerateResponseRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        // First check if user is authenticated
+        if (!auth()->check()) {
+            return false;
+        }
+
         $email = $this->route('email');
 
-        return $email && $email->emailAccount->company_id === $this->user()->company_id;
+        // If no email found in route, return false
+        if (!$email) {
+            return false;
+        }
+
+        // Load the emailAccount relationship if not already loaded
+        if (!$email->relationLoaded('emailAccount')) {
+            $email->load('emailAccount');
+        }
+
+        // Check if email has an account and it belongs to the user's company
+        return $email->emailAccount && $email->emailAccount->company_id === auth()->user()->company_id;
     }
 
     /**

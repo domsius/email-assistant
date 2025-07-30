@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { authenticatedFetch } from "@/lib/utils";
 import {
   Send,
   X,
@@ -20,6 +21,7 @@ import {
   Smile,
   MoreHorizontal,
   ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import { useInbox } from "@/contexts/inbox-context";
 
@@ -58,6 +60,7 @@ export function ComposePanel({
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [formData, setFormData] = useState({
     to: composeData.to,
     cc: composeData.cc,
@@ -247,6 +250,58 @@ export function ComposePanel({
     exitComposeMode();
   };
 
+  const handleGenerateAI = async () => {
+    if (!originalEmail) {
+      toast.error("No email to reply to");
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    
+    try {
+      // Use authenticated fetch helper for API calls
+      const response = await authenticatedFetch(`/api/emails/${originalEmail.id}/generate-response`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          // Send optional parameters that the API accepts
+          tone: 'professional',
+          style: 'conversational',
+          include_signature: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Handle the response - check for different possible response structures
+      if (data?.data?.draft?.ai_generated_content) {
+        handleFormChange("body", data.data.draft.ai_generated_content);
+        toast.success("AI response generated successfully");
+      } else if (data?.response) {
+        handleFormChange("body", data.response);
+        toast.success("AI response generated successfully");
+      } else if (data?.ai_generated_content) {
+        handleFormChange("body", data.ai_generated_content);
+        toast.success("AI response generated successfully");
+      } else {
+        console.error("Unexpected response format:", data);
+        toast.error("Could not generate response - unexpected format");
+      }
+    } catch (error) {
+      console.error("Failed to generate AI response:", error);
+      toast.error("Failed to generate AI response");
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
   const getActionLabel = () => {
     switch (composeData.action) {
       case "reply":
@@ -430,6 +485,22 @@ export function ComposePanel({
                     <Smile className="h-4 w-4" />
                   </Button>
                 </div>
+                {originalEmail && (composeData.action === "reply" || composeData.action === "replyAll") && (
+                  <>
+                    <Separator orientation="vertical" className="mx-1 h-6" />
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 px-3 gap-2" 
+                      title="Generate response with AI"
+                      onClick={handleGenerateAI}
+                      disabled={isGeneratingAI}
+                    >
+                      <Sparkles className={`h-4 w-4 ${isGeneratingAI ? 'animate-pulse' : ''}`} />
+                      <span className="text-xs">Generate with AI</span>
+                    </Button>
+                  </>
+                )}
                 <Separator orientation="vertical" className="mx-1 h-6" />
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="More options">
                   <MoreHorizontal className="h-4 w-4" />

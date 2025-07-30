@@ -15,21 +15,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Email account management routes
     Route::get('email-accounts/providers', [App\Http\Controllers\Api\EmailAccountController::class, 'providers']);
-    Route::post('email-accounts/oauth/initiate', [App\Http\Controllers\Api\EmailAccountController::class, 'initiateOAuth'])
-        ->middleware('rate-limit-api:gmail');
-    Route::post('email-accounts/{emailAccount}/sync', [App\Http\Controllers\Api\EmailAccountController::class, 'syncEmails'])
-        ->middleware('rate-limit-api:email-sync');
+    Route::post('email-accounts/oauth/initiate', [App\Http\Controllers\Api\EmailAccountController::class, 'initiateOAuth']);
+    Route::post('email-accounts/{emailAccount}/sync', [App\Http\Controllers\Api\EmailAccountController::class, 'syncEmails']);
     Route::get('email-accounts/{emailAccount}/sync-status', [App\Http\Controllers\Api\EmailAccountController::class, 'syncStatus']);
     Route::get('email-accounts/{emailAccount}/sync-progress', [App\Http\Controllers\Api\EmailAccountController::class, 'syncProgress']);
-    Route::post('email-accounts/{emailAccount}/test', [App\Http\Controllers\Api\EmailAccountController::class, 'testConnection'])
-        ->middleware('rate-limit-api:gmail');
+    Route::post('email-accounts/{emailAccount}/test', [App\Http\Controllers\Api\EmailAccountController::class, 'testConnection']);
     Route::apiResource('email-accounts', App\Http\Controllers\Api\EmailAccountController::class);
 
-    // AI Processing routes with rate limiting
-    Route::post('emails/{email}/generate-response', [EmailController::class, 'generateResponse'])
-        ->middleware('rate-limit-api:openai');
-    Route::post('emails/{email}/analyze', [EmailController::class, 'analyze'])
-        ->middleware('rate-limit-api:openai');
+    // AI Processing routes
+    Route::post('emails/{email}/generate-response', [EmailController::class, 'generateResponse']);
+    Route::post('emails/{email}/analyze', [EmailController::class, 'analyze']);
 
     // TODO: Add more API routes for other controllers
     // Route::apiResource('customers', CustomerController::class);
