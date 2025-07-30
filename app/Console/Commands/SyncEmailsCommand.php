@@ -184,12 +184,17 @@ class SyncEmailsCommand extends Command
 
         $this->info("Found {$accounts->count()} active email accounts across all companies");
 
-        $confirm = $this->confirm("Do you want to sync all {$accounts->count()} accounts?");
+        // Skip confirmation in non-interactive mode (e.g., when running via cron)
+        if ($this->option('no-interaction')) {
+            $this->info('Running in non-interactive mode, proceeding with sync...');
+        } else {
+            $confirm = $this->confirm("Do you want to sync all {$accounts->count()} accounts?");
 
-        if (! $confirm) {
-            $this->info('Sync cancelled');
+            if (! $confirm) {
+                $this->info('Sync cancelled');
 
-            return;
+                return;
+            }
         }
 
         foreach ($accounts as $account) {

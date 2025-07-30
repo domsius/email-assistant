@@ -9,7 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Schedule email syncing for all active accounts every 15 minutes
-Schedule::command('sync:emails --all --limit=50 --batch-size=10')
+Schedule::command('sync:emails --all --limit=50 --batch-size=10 --no-interaction')
     ->everyFifteenMinutes()
     ->name('sync-all-emails')
     ->withoutOverlapping()
