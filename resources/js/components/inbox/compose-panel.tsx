@@ -20,7 +20,6 @@ import {
   Image,
   Smile,
   MoreHorizontal,
-  ChevronDown,
   Sparkles,
 } from "lucide-react";
 import { useInbox } from "@/contexts/inbox-context";
@@ -91,7 +90,7 @@ export function ComposePanel({
         bodyRef.current?.setSelectionRange(0, 0);
       }
     }
-  }, []);
+  }, [composeData.action, formData.to, formData.subject]);
 
   // Auto-save draft
   const saveDraft = useCallback(async () => {
@@ -160,6 +159,89 @@ export function ComposePanel({
       }
     };
   }, [formData, saveDraft, hasUnsavedChanges]);
+
+  const handleFormat = useCallback((format: 'bold' | 'italic' | 'underline') => {
+    const textarea = bodyRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = formData.body.substring(start, end);
+
+    if (selectedText) {
+      let formattedText = '';
+      switch (format) {
+        case 'bold':
+          formattedText = `**${selectedText}**`;
+          break;
+        case 'italic':
+          formattedText = `*${selectedText}*`;
+          break;
+        case 'underline':
+          formattedText = `__${selectedText}__`;
+          break;
+      }
+
+      const newBody = formData.body.substring(0, start) + formattedText + formData.body.substring(end);
+      handleFormChange('body', newBody);
+
+      // Restore cursor position after the formatted text
+      setTimeout(() => {
+        textarea.focus();
+        const newCursorPos = start + formattedText.length;
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      }, 0);
+    } else {
+      // If no text is selected, insert formatting markers at cursor position
+      let markers = '';
+      switch (format) {
+        case 'bold':
+          markers = '****';
+          break;
+        case 'italic':
+          markers = '**';
+          break;
+        case 'underline':
+          markers = '____';
+          break;
+      }
+
+      const newBody = formData.body.substring(0, start) + markers + formData.body.substring(start);
+      handleFormChange('body', newBody);
+
+      // Place cursor in the middle of the markers
+      setTimeout(() => {
+        textarea.focus();
+        const cursorPos = start + markers.length / 2;
+        textarea.setSelectionRange(cursorPos, cursorPos);
+      }, 0);
+    }
+  }, [formData.body, handleFormChange]);
+
+  // Keyboard shortcuts for formatting
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.target === bodyRef.current) {
+        switch (e.key.toLowerCase()) {
+          case 'b':
+            e.preventDefault();
+            handleFormat('bold');
+            break;
+          case 'i':
+            e.preventDefault();
+            handleFormat('italic');
+            break;
+          case 'u':
+            e.preventDefault();
+            handleFormat('underline');
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [formData.body, handleFormat]);
 
   const handleSend = async () => {
     if (!formData.to && !formData.cc && !formData.bcc) {
@@ -431,7 +513,7 @@ export function ComposePanel({
               placeholder="Write your message..."
               value={formData.body}
               onChange={(e) => handleFormChange("body", e.target.value)}
-              className="min-h-[300px] h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0"
+              className="min-h-[300px] h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0 font-mono"
             />
           </div>
 
@@ -463,25 +545,46 @@ export function ComposePanel({
                 </Button>
                 <Separator orientation="vertical" className="mx-1 h-6" />
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Bold">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 w-8 p-0" 
+                    title="Bold (Ctrl+B)"
+                    onClick={() => handleFormat('bold')}
+                    type="button"
+                  >
                     <Bold className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Italic">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 w-8 p-0" 
+                    title="Italic (Ctrl+I)"
+                    onClick={() => handleFormat('italic')}
+                    type="button"
+                  >
                     <Italic className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Underline">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 w-8 p-0" 
+                    title="Underline (Ctrl+U)"
+                    onClick={() => handleFormat('underline')}
+                    type="button"
+                  >
                     <Underline className="h-4 w-4" />
                   </Button>
                 </div>
                 <Separator orientation="vertical" className="mx-1 h-6" />
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Insert link">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Insert link" type="button">
                     <Link className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Insert image">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Insert image" type="button">
                     <Image className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Insert emoji">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Insert emoji" type="button">
                     <Smile className="h-4 w-4" />
                   </Button>
                 </div>
