@@ -32,12 +32,12 @@ export function PlanCard({
       className={cn(
         "relative cursor-pointer transition-all hover:shadow-lg",
         isSelected && "ring-2 ring-primary",
-        disabled && "cursor-not-allowed opacity-50"
+        disabled && "cursor-not-allowed opacity-50",
       )}
       onClick={() => !disabled && onSelect(planKey)}
     >
       {isRecommended && (
-        <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary">
+        <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary z-10">
           Recommended
         </Badge>
       )}
@@ -64,9 +64,6 @@ export function PlanCard({
             </li>
           ))}
         </ul>
-        {isSelected && (
-          <div className="absolute inset-x-0 bottom-0 h-1 bg-primary rounded-b-lg" />
-        )}
       </CardContent>
     </Card>
   );
