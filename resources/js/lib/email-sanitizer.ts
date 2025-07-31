@@ -122,6 +122,7 @@ export const EMAIL_SANITIZE_CONFIG = {
   ALLOW_DATA_ATTR: true, // Enable data attributes
   KEEP_CONTENT: true,
   ADD_ATTR: ["target", "rel"],
+  ALLOW_DATA_URI: true, // Allow data: URLs for images
   FORCE_BODY: true,
   RETURN_DOM: false,
   RETURN_DOM_FRAGMENT: false,

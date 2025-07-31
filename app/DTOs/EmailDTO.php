@@ -30,6 +30,7 @@ class EmailDTO
         public readonly ?EmailSentiment $sentiment,
         public readonly ?EmailUrgency $urgency,
         public readonly ?AiAnalysisDTO $aiAnalysis,
+        public readonly array $attachments,
     ) {}
 
     public static function fromModel(EmailMessage $email): self
@@ -65,7 +66,7 @@ class EmailDTO
         // Only sanitize content if body fields are loaded
         $content = '';
         if (isset($email->body_html) || isset($email->body_plain) || isset($email->body_content)) {
-            $content = self::sanitizeHtml($email->body_html ?? $email->body_plain ?? $email->body_content ?? '');
+            $content = self::sanitizeHtml($email->body_html ?? $email->body_plain ?? $email->body_content ?? '', $email);
         }
 
         return new self(
@@ -87,6 +88,19 @@ class EmailDTO
             sentiment: $sentiment,
             urgency: $urgency,
             aiAnalysis: $aiAnalysis,
+            attachments: $email->relationLoaded('attachments') ?
+                $email->attachments->map(fn ($attachment) => [
+                    'id' => $attachment->id,
+                    'filename' => $attachment->filename,
+                    'size' => $attachment->size,
+                    'formattedSize' => $attachment->formatted_size,
+                    'contentType' => $attachment->content_type,
+                    'contentId' => $attachment->content_id,
+                    'isInline' => $attachment->isInline(),
+                    'isImage' => $attachment->isImage(),
+                    'downloadUrl' => $attachment->download_url,
+                    'thumbnailUrl' => $attachment->thumbnail_url,
+                ])->toArray() : [],
         );
     }
 
@@ -95,11 +109,46 @@ class EmailDTO
         return mb_convert_encoding($text, 'UTF-8', 'UTF-8');
     }
 
-    private static function sanitizeHtml(string $html): string
+    private static function sanitizeHtml(string $html, ?EmailMessage $email = null): string
     {
         $sanitizer = app(HtmlSanitizerService::class);
 
+        // Replace CID URLs with actual URLs if we have the email model
+        if ($email && $email->relationLoaded('attachments')) {
+            $html = self::replaceCidUrls($html, $email);
+        }
+
         return self::sanitizeText($sanitizer->sanitize($html));
+    }
+
+    /**
+     * Replace cid: URLs with actual API URLs for inline images
+     */
+    private static function replaceCidUrls(string $html, EmailMessage $email): string
+    {
+        // Find all cid: URLs in the HTML
+        $pattern = '/src=["\']?cid:([^"\'\s>]+)["\']?/i';
+
+        return preg_replace_callback($pattern, function ($matches) use ($email) {
+            $contentId = $matches[1];
+
+            // Find the attachment with this content ID
+            $attachment = $email->attachments->first(function ($att) use ($contentId) {
+                return $att->content_id === $contentId ||
+                       $att->content_id === '<'.$contentId.'>' ||
+                       $att->content_id === 'cid:'.$contentId;
+            });
+
+            if ($attachment) {
+                // Replace with API URL
+                $apiUrl = "/api/emails/{$email->id}/inline/{$contentId}";
+
+                return 'src="'.$apiUrl.'"';
+            }
+
+            // If no attachment found, return original
+            return $matches[0];
+        }, $html);
     }
 
     public function toArray(): array
@@ -124,6 +173,7 @@ class EmailDTO
             'sentiment' => $this->sentiment?->value,
             'urgency' => $this->urgency?->value,
             'aiAnalysis' => $this->aiAnalysis?->toArray(),
+            'attachments' => $this->attachments,
         ];
     }
 }

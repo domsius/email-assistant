@@ -130,6 +130,11 @@ class EmailMessage extends Model
         return $this->hasMany(EmailMessage::class, 'replied_to_message_id');
     }
 
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(EmailAttachment::class);
+    }
+
     public function scopePending($query)
     {
         return $query->where('status', 'pending');

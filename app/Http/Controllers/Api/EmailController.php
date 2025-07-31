@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\AnalyzeEmailRequest;
 use App\Http\Requests\Api\GenerateResponseRequest;
 use App\Models\Customer;
+use App\Models\EmailAttachment;
 use App\Models\EmailMessage;
 use App\Services\AIResponseService;
+use App\Services\AttachmentStorageService;
 use App\Services\LanguageDetectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,7 +18,8 @@ class EmailController extends Controller
 {
     public function __construct(
         private LanguageDetectionService $languageDetectionService,
-        private AIResponseService $aiResponseService
+        private AIResponseService $aiResponseService,
+        private AttachmentStorageService $attachmentStorage
     ) {}
 
     /**
@@ -245,5 +248,91 @@ class EmailController extends Controller
                 ],
             ], 500);
         }
+    }
+
+    /**
+     * Download an email attachment
+     */
+    public function downloadAttachment(EmailMessage $email, EmailAttachment $attachment)
+    {
+        // Ensure the attachment belongs to the email
+        if ($attachment->email_message_id !== $email->id) {
+            abort(404);
+        }
+
+        // Ensure user has access to this email
+        $this->authorize('view', $email);
+
+        // Check if we have a storage path
+        if (!$attachment->storage_path) {
+            abort(404, 'Attachment file not found');
+        }
+
+        // Get the file stream
+        $stream = $this->attachmentStorage->getStream($attachment->storage_path);
+        
+        if (!$stream) {
+            abort(404, 'Attachment file not found');
+        }
+
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+        }, 200, [
+            'Content-Type' => $attachment->content_type ?? 'application/octet-stream',
+            'Content-Disposition' => 'attachment; filename="' . $attachment->filename . '"',
+            'Content-Length' => $attachment->size,
+        ]);
+    }
+
+    /**
+     * Get inline image by content ID
+     */
+    public function getInlineImage(EmailMessage $email, string $contentId)
+    {
+        // Ensure user has access to this email
+        $this->authorize('view', $email);
+
+        // Find attachment by content ID
+        $attachment = $email->attachments()
+            ->where('content_id', $contentId)
+            ->orWhere('content_id', 'like', '%'.$contentId.'%')
+            ->first();
+
+        if (! $attachment) {
+            // Return a placeholder image when attachment not found
+            return response()->stream(function () {
+                // A simple red placeholder image
+                $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAE0lEQVR42mP8/58BCiBFTAwMAJ+tCv6TvdXOAAAAAElFTkSuQmCC');
+                echo $image;
+            }, 200, [
+                'Content-Type' => 'image/png',
+                'Cache-Control' => 'public, max-age=60',
+            ]);
+        }
+
+        // Check if we have a storage path
+        if (!$attachment->storage_path) {
+            // Return a placeholder if no file stored
+            return response()->stream(function () {
+                $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+                echo $image;
+            }, 200, [
+                'Content-Type' => 'image/png',
+                'Cache-Control' => 'public, max-age=3600',
+            ]);
+        }
+
+        // Get the file content
+        $content = $this->attachmentStorage->getContent($attachment->storage_path);
+        
+        if (!$content) {
+            abort(404, 'Image file not found');
+        }
+
+        return response($content, 200, [
+            'Content-Type' => $attachment->content_type ?? 'image/png',
+            'Cache-Control' => 'public, max-age=3600',
+            'Content-Length' => strlen($content),
+        ]);
     }
 }

@@ -25,6 +25,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // AI Processing routes
     Route::post('emails/{email}/generate-response', [EmailController::class, 'generateResponse']);
     Route::post('emails/{email}/analyze', [EmailController::class, 'analyze']);
+    
+    // Attachment routes
+    Route::get('emails/{email}/attachments/{attachment}', [EmailController::class, 'downloadAttachment']);
+    Route::get('emails/{email}/inline/{contentId}', [EmailController::class, 'getInlineImage']);
+    
+    // Compose attachment routes
+    Route::post('attachments/upload', [App\Http\Controllers\Api\AttachmentController::class, 'upload']);
+    Route::delete('attachments/{tempId}', [App\Http\Controllers\Api\AttachmentController::class, 'remove']);
 
     // TODO: Add more API routes for other controllers
     // Route::apiResource('customers', CustomerController::class);

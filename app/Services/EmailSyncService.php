@@ -7,7 +7,9 @@ use App\Jobs\ProcessSingleEmailJob;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\EmailAccount;
+use App\Models\EmailAttachment;
 use App\Models\EmailMessage;
+use App\Services\AttachmentStorageService;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,11 +17,13 @@ use Illuminate\Support\Facades\Log;
 class EmailSyncService extends BaseService
 {
     private EmailProviderFactory $providerFactory;
+    private AttachmentStorageService $attachmentStorage;
 
-    public function __construct(EmailProviderFactory $providerFactory)
+    public function __construct(EmailProviderFactory $providerFactory, AttachmentStorageService $attachmentStorage)
     {
         parent::__construct();
         $this->providerFactory = $providerFactory;
+        $this->attachmentStorage = $attachmentStorage;
     }
 
     /**
@@ -212,6 +216,11 @@ class EmailSyncService extends BaseService
             'has_body_plain' => ! empty($emailMessage->body_plain),
         ]);
 
+        // Process attachments if any
+        if (!empty($emailData['attachments'])) {
+            $this->processAttachments($emailMessage, $emailData['attachments'], $emailAccount);
+        }
+
         // Dispatch job to process email through AI pipeline (if configured)
         if (config('email-processing.auto_process_incoming', false)) {
             ProcessIncomingEmail::dispatch($emailMessage);
@@ -356,6 +365,81 @@ class EmailSyncService extends BaseService
                 'processed' => 0,
                 'skipped' => 0,
             ];
+        }
+    }
+
+    /**
+     * Process attachments for an email message
+     */
+    private function processAttachments(EmailMessage $emailMessage, array $attachments, EmailAccount $emailAccount): void
+    {
+        Log::info('Processing attachments for email', [
+            'email_id' => $emailMessage->id,
+            'attachment_count' => count($attachments),
+        ]);
+
+        foreach ($attachments as $attachmentData) {
+            try {
+                // Download attachment content from Gmail
+                $content = $this->downloadGmailAttachment($emailAccount, $attachmentData);
+                
+                if ($content) {
+                    // Store the attachment file
+                    $storedPath = $this->attachmentStorage->storeAttachmentContent(
+                        $content,
+                        $attachmentData['filename'],
+                        $emailAccount->id
+                    );
+
+                    // Create attachment database record
+                    EmailAttachment::create([
+                        'email_message_id' => $emailMessage->id,
+                        'filename' => $attachmentData['filename'],
+                        'content_type' => $attachmentData['content_type'] ?? 'application/octet-stream',
+                        'size' => $attachmentData['size'] ?? strlen($content),
+                        'content_id' => $attachmentData['content_id'] ?? null,
+                        'content_disposition' => $attachmentData['content_disposition'] ?? null,
+                        'storage_path' => $storedPath,
+                    ]);
+
+                    Log::info('Attachment processed successfully', [
+                        'filename' => $attachmentData['filename'],
+                        'content_id' => $attachmentData['content_id'] ?? null,
+                        'size' => strlen($content),
+                    ]);
+                }
+            } catch (Exception $e) {
+                Log::error('Failed to process attachment', [
+                    'filename' => $attachmentData['filename'],
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Download attachment content from Gmail
+     */
+    private function downloadGmailAttachment(EmailAccount $emailAccount, array $attachmentData): ?string
+    {
+        try {
+            $provider = $this->providerFactory->create($emailAccount);
+            
+            if (method_exists($provider, 'downloadAttachment')) {
+                return $provider->downloadAttachment(
+                    $attachmentData['message_id'],
+                    $attachmentData['attachment_id']
+                );
+            }
+            
+            return null;
+        } catch (Exception $e) {
+            Log::error('Failed to download Gmail attachment', [
+                'attachment_id' => $attachmentData['attachment_id'],
+                'error' => $e->getMessage(),
+            ]);
+            
+            return null;
         }
     }
 }

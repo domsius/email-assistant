@@ -47,6 +47,7 @@ class EmailRepository
         $query->with([
             'emailAccount:id,email_address',
             'topic:id,name',
+            'attachments',
         ]);
 
         // Convert cursor (page number) to integer
@@ -100,6 +101,7 @@ class EmailRepository
             ->with([
                 'emailAccount:id,email_address',
                 'topic:id,name',
+                'attachments',
             ])
             ->find($emailId);
     }

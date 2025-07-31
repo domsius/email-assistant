@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { authenticatedFetch } from "@/lib/utils";
+import { authenticatedFetch, cn } from "@/lib/utils";
 import {
   Send,
   X,
@@ -23,6 +23,8 @@ import {
   Sparkles,
   Eye,
   Pencil,
+  FileIcon,
+  Trash2,
 } from "lucide-react";
 import { useInbox } from "@/contexts/inbox-context";
 
@@ -48,6 +50,16 @@ interface ComposePanelProps {
   draftId?: number | null;
 }
 
+interface Attachment {
+  id: string;
+  filename: string;
+  size: number;
+  formattedSize: string;
+  contentType: string;
+  uploading?: boolean;
+  error?: string;
+}
+
 export function ComposePanel({
   composeData,
   originalEmail,
@@ -63,6 +75,8 @@ export function ComposePanel({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     to: composeData.to,
     cc: composeData.cc,
@@ -75,10 +89,10 @@ export function ComposePanel({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper function to handle form changes
-  const handleFormChange = (field: string, value: string) => {
+  const handleFormChange = useCallback((field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setHasUnsavedChanges(true);
-  };
+  }, []);
 
   useEffect(() => {
     // Focus on appropriate field
@@ -279,6 +293,7 @@ export function ComposePanel({
       draftId: draftId,
       inReplyTo: composeData.inReplyTo || null,
       references: composeData.references || null,
+      attachmentIds: attachments.map(att => att.id),
     }, {
       preserveScroll: true,
       preserveState: true,
@@ -389,6 +404,79 @@ export function ComposePanel({
     } finally {
       setIsGeneratingAI(false);
     }
+  };
+
+  // Handle file upload
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      const tempId = `temp_${Date.now()}_${Math.random()}`;
+      
+      // Add to attachments with uploading state
+      setAttachments(prev => [...prev, {
+        id: tempId,
+        filename: file.name,
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
+        contentType: file.type,
+        uploading: true,
+      }]);
+      
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('email_account_id', selectedAccount?.toString() || '');
+
+        const response = await authenticatedFetch('/api/attachments/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Upload failed');
+        }
+
+        const data = await response.json();
+        
+        // Update attachment with server response
+        setAttachments(prev => prev.map(att => 
+          att.id === tempId ? { ...data.attachment, uploading: false } : att
+        ));
+      } catch (error) {
+        console.error('File upload failed:', error);
+        setAttachments(prev => prev.map(att => 
+          att.id === tempId ? { ...att, uploading: false, error: 'Upload failed' } : att
+        ));
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveAttachment = async (attachmentId: string) => {
+    try {
+      await authenticatedFetch(`/api/attachments/${attachmentId}`, {
+        method: 'DELETE',
+      });
+      
+      setAttachments(prev => prev.filter(att => att.id !== attachmentId));
+    } catch (error) {
+      console.error('Failed to remove attachment:', error);
+      toast.error('Failed to remove attachment');
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1048576).toFixed(1)} MB`;
   };
 
   const getActionLabel = () => {
@@ -553,13 +641,70 @@ export function ComposePanel({
             </div>
           )}
 
+          {/* Attachments */}
+          {attachments.length > 0 && (
+            <div className="border-t px-6 py-4">
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Attachments</h4>
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50",
+                        attachment.error && "border-red-500 bg-red-50",
+                        attachment.uploading && "opacity-60"
+                      )}
+                    >
+                      <FileIcon className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {attachment.filename}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {attachment.formattedSize}
+                          {attachment.uploading && " • Uploading..."}
+                          {attachment.error && " • Failed"}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 ml-2"
+                        onClick={() => handleRemoveAttachment(attachment.id)}
+                        disabled={attachment.uploading}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Toolbar */}
           <div className="border-t">
             <div className="flex items-center justify-between px-6 py-3">
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Attach file">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0" 
+                  title="Attach file"
+                  onClick={() => fileInputRef.current?.click()}
+                  type="button"
+                >
                   <Paperclip className="h-4 w-4" />
                 </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                  accept="*/*"
+                />
                 <Separator orientation="vertical" className="mx-1 h-6" />
                 <div className="flex items-center gap-1">
                   <Button 

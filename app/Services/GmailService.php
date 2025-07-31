@@ -225,6 +225,9 @@ class GmailService implements EmailProviderInterface
             // Get email body
             $bodyData = $this->extractBodyFromPayload($fullMessage->getPayload());
 
+            // Extract attachments
+            $attachments = $this->extractAttachments($fullMessage);
+
             return [
                 'message_id' => $fullMessage->getId(),
                 'thread_id' => $fullMessage->getThreadId(),
@@ -238,6 +241,7 @@ class GmailService implements EmailProviderInterface
                     'gmail_id' => $fullMessage->getId(),
                     'labels' => $fullMessage->getLabelIds(),
                 ],
+                'attachments' => $attachments,
             ];
         } catch (Exception $e) {
             Log::error('Error processing Gmail message: '.$e->getMessage());
@@ -255,6 +259,62 @@ class GmailService implements EmailProviderInterface
         }
 
         return null;
+    }
+
+    private function extractAttachments(Message $message): array
+    {
+        $attachments = [];
+        $messageId = $message->getId();
+        
+        try {
+            $this->extractAttachmentsFromPart($message->getPayload(), $attachments, $messageId);
+        } catch (Exception $e) {
+            Log::error('Error extracting attachments: ' . $e->getMessage());
+        }
+        
+        return $attachments;
+    }
+    
+    private function extractAttachmentsFromPart($part, &$attachments, $messageId)
+    {
+        // Check if this part has an attachment
+        $filename = $part->getFilename();
+        
+        if ($filename) {
+            $body = $part->getBody();
+            $attachmentId = $body->getAttachmentId();
+            
+            $attachment = [
+                'filename' => $filename,
+                'content_type' => $part->getMimeType(),
+                'size' => $body->getSize() ?? 0,
+                'attachment_id' => $attachmentId,
+                'message_id' => $messageId,
+            ];
+            
+            // Check if it's an inline attachment
+            $headers = $part->getHeaders();
+            foreach ($headers as $header) {
+                if ($header->getName() === 'Content-ID') {
+                    $contentId = trim($header->getValue(), '<>');
+                    $attachment['content_id'] = $contentId;
+                    $attachment['content_disposition'] = 'inline';
+                }
+                if ($header->getName() === 'Content-Disposition') {
+                    $attachment['content_disposition'] = $header->getValue();
+                }
+            }
+            
+            $attachments[] = $attachment;
+        }
+        
+        // Recursively check parts
+        $parts = $part->getParts();
+        if ($parts) {
+            foreach ($parts as $subPart) {
+                $this->extractAttachmentsFromPart($subPart, $attachments, $messageId);
+            }
+        }
     }
 
     private function extractBodyFromPayload($payload): array
@@ -582,6 +642,31 @@ class GmailService implements EmailProviderInterface
                 'error' => $e->getMessage(),
             ]);
 
+            return null;
+        }
+    }
+
+    /**
+     * Download attachment content from Gmail
+     */
+    public function downloadAttachment(string $messageId, string $attachmentId): ?string
+    {
+        try {
+            $attachment = $this->gmail->users_messages_attachments->get('me', $messageId, $attachmentId);
+            $data = $attachment->getData();
+            
+            if ($data) {
+                return $this->base64url_decode($data);
+            }
+            
+            return null;
+        } catch (Exception $e) {
+            Log::error('Failed to download Gmail attachment', [
+                'message_id' => $messageId,
+                'attachment_id' => $attachmentId,
+                'error' => $e->getMessage(),
+            ]);
+            
             return null;
         }
     }

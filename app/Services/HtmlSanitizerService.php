@@ -46,7 +46,7 @@ class HtmlSanitizerService
     ];
 
     private array $allowedProtocols = [
-        'http', 'https', 'mailto', 'tel',
+        'http', 'https', 'mailto', 'tel', 'data', 'cid',
     ];
 
     /**
@@ -239,8 +239,8 @@ class HtmlSanitizerService
             // Check protocol
             $protocol = parse_url($src, PHP_URL_SCHEME);
 
-            // Only allow http, https, and data URLs for images
-            if ($protocol && ! in_array(strtolower($protocol), ['http', 'https', 'data'])) {
+            // Only allow http, https, data, and cid URLs for images
+            if ($protocol && ! in_array(strtolower($protocol), ['http', 'https', 'data', 'cid'])) {
                 $node->removeAttribute('src');
                 $node->setAttribute('alt', '[Image removed for security]');
 
