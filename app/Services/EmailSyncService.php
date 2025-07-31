@@ -382,16 +382,31 @@ class EmailSyncService extends BaseService
 
         foreach ($attachments as $attachmentData) {
             try {
-                // Download attachment content from Gmail
-                $content = $this->downloadGmailAttachment($emailAccount, $attachmentData);
+                // Check if this is an embedded inline image or needs to be downloaded
+                $content = null;
                 
-                Log::info('EmailSync: Downloaded attachment', [
-                    'email_id' => $emailMessage->id,
-                    'filename' => $attachmentData['filename'],
-                    'content_id' => $attachmentData['content_id'] ?? null,
-                    'content_size' => $content ? strlen($content) : 0,
-                    'has_content' => $content !== null,
-                ]);
+                if (isset($attachmentData['embedded_data'])) {
+                    // Inline image with embedded data - decode it
+                    $content = base64_decode(str_replace(['-', '_'], ['+', '/'], $attachmentData['embedded_data']));
+                    
+                    Log::info('EmailSync: Using embedded data for inline image', [
+                        'email_id' => $emailMessage->id,
+                        'filename' => $attachmentData['filename'],
+                        'content_id' => $attachmentData['content_id'],
+                        'content_size' => strlen($content),
+                    ]);
+                } else {
+                    // Regular attachment - download it
+                    $content = $this->downloadGmailAttachment($emailAccount, $attachmentData);
+                    
+                    Log::info('EmailSync: Downloaded attachment', [
+                        'email_id' => $emailMessage->id,
+                        'filename' => $attachmentData['filename'],
+                        'content_id' => $attachmentData['content_id'] ?? null,
+                        'content_size' => $content ? strlen($content) : 0,
+                        'has_content' => $content !== null,
+                    ]);
+                }
                 
                 if ($content) {
                     // Store the attachment file

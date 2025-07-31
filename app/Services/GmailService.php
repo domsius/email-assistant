@@ -362,28 +362,49 @@ class GmailService implements EmailProviderInterface
         
         // Check if we should include this part as an attachment
         if ($isAttachment) {
-            // Skip parts without attachment IDs (they can't be downloaded)
-            if (!$attachmentId) {
-                Log::warning('Gmail: Skipping attachment without attachment ID', [
+            // For inline images without attachment ID, we need to extract the data directly
+            if (!$attachmentId && $contentId && $body->getData()) {
+                // This is an inline image embedded in the email body
+                $attachment = [
+                    'filename' => $filename ?: 'attachment_' . $contentId,
+                    'content_type' => $mimeType,
+                    'size' => $body->getSize() ?? 0,
+                    'attachment_id' => null,
+                    'message_id' => $messageId,
+                    'content_id' => $contentId,
+                    'content_disposition' => $contentDisposition ?: 'inline',
+                    'embedded_data' => $body->getData(), // Base64 encoded data
+                ];
+                
+                $attachments[] = $attachment;
+                
+                Log::info('Gmail: Found embedded inline image', [
+                    'message_id' => $messageId,
+                    'content_id' => $contentId,
+                    'filename' => $filename,
+                    'data_size' => strlen($body->getData())
+                ]);
+            } elseif ($attachmentId) {
+                // Regular attachment with attachment ID
+                $attachment = [
+                    'filename' => $filename ?: 'attachment_' . $attachmentId,
+                    'content_type' => $mimeType,
+                    'size' => $body->getSize() ?? 0,
+                    'attachment_id' => $attachmentId,
+                    'message_id' => $messageId,
+                    'content_id' => $contentId,
+                    'content_disposition' => $contentDisposition ?: ($contentId ? 'inline' : 'attachment'),
+                ];
+                
+                $attachments[] = $attachment;
+            } else {
+                Log::warning('Gmail: Skipping attachment without attachment ID or embedded data', [
                     'message_id' => $messageId,
                     'mime_type' => $mimeType,
                     'content_id' => $contentId,
                     'filename' => $filename
                 ]);
-                return;
             }
-            
-            $attachment = [
-                'filename' => $filename ?: 'attachment_' . $attachmentId,
-                'content_type' => $mimeType,
-                'size' => $body->getSize() ?? 0,
-                'attachment_id' => $attachmentId,
-                'message_id' => $messageId,
-                'content_id' => $contentId,
-                'content_disposition' => $contentDisposition ?: ($contentId ? 'inline' : 'attachment'),
-            ];
-            
-            $attachments[] = $attachment;
         }
         
         // Recursively check parts
