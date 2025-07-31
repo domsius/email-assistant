@@ -63,13 +63,9 @@ function EmailPreviewContent({
   const [showHeaders, setShowHeaders] = useState(false);
   const [useIframeIsolation, setUseIframeIsolation] = useState(true);
 
-  // Sanitize HTML content for security
   // Pass raw content to EmailContentRenderer, let it handle sanitization
   // This ensures styles can be properly extracted before sanitization
   const emailContent = email.content;
-  
-  console.log("EmailPreview received email:", email);
-  console.log("Email content:", emailContent);
 
 
   return (

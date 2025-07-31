@@ -20,7 +20,7 @@ class HtmlSanitizerService
 
     private array $allowedAttributes = [
         'a' => ['href', 'title', 'target', 'rel', 'style'],
-        'img' => ['src', 'alt', 'width', 'height', 'style', 'align'],
+        'img' => ['src', 'alt', 'width', 'height', 'style', 'align', 'loading', 'srcset', 'sizes'],
         'blockquote' => ['cite', 'style'],
         'code' => ['class', 'style'],
         'pre' => ['class', 'style'],

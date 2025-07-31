@@ -9,8 +9,8 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Schedule email syncing for all active accounts every minute
-Schedule::command('sync:emails --all --limit=50 --batch-size=10 --no-interaction')
-    ->everyMinute()
+Schedule::command('sync:emails --all --limit=25 --batch-size=5 --no-interaction')
+    ->everyTenMinutes()
     ->name('sync-all-emails')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/email-sync.log'));

@@ -85,10 +85,6 @@ export function InboxProvider({
   currentFolder,
   currentFilter = "all",
 }: InboxProviderProps) {
-  console.log("InboxProvider initialized with emails:", emails);
-  if (emails.length > 0) {
-    console.log("First email content:", emails[0].content);
-  }
   const [state, setState] = useState<InboxState>({
     selectedEmails: [],
     selectedEmail: emails[0] || null,
@@ -110,10 +106,6 @@ export function InboxProvider({
   React.useEffect(() => {
     setState((prev) => {
       const newSelectedEmail = emails.find((e) => e.id === prev.selectedEmail?.id) || emails[0] || null;
-      console.log("Updating selectedEmail from emails list:", newSelectedEmail);
-      if (newSelectedEmail) {
-        console.log("Selected email content:", newSelectedEmail.content);
-      }
       return {
         ...prev,
         selectedEmail: newSelectedEmail,
@@ -154,13 +146,6 @@ export function InboxProvider({
           const fullEmail = await response.json();
 
           // Update the selected email with full content
-          console.log("Full email data from API:", fullEmail);
-          console.log("Content fields:", {
-            body_html: fullEmail.body_html,
-            body_plain: fullEmail.body_plain,
-            body_content: fullEmail.body_content,
-          });
-          
           setState((prev) => ({
             ...prev,
             selectedEmail: {

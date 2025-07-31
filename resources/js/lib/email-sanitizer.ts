@@ -147,10 +147,6 @@ export function sanitizeEmailContent(content: string): string {
   if (!content) return "";
 
   try {
-    console.log('=== sanitizeEmailContent START ===');
-    console.log('Input content preview:', content.substring(0, 200));
-    console.log('Input has <style:', content.includes('<style'));
-    console.log('Input has &lt;style:', content.includes('&lt;style'));
     
     // Decode HTML entities multiple times if needed (for double-encoded content)
     let decodedContent = content;
@@ -167,24 +163,17 @@ export function sanitizeEmailContent(content: string): string {
     }
     
     // Extract style tags before sanitization to preserve them
-    // Also check for escaped style tags
     const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
-    const escapedStyleRegex = /&lt;style[^&]*&gt;([\s\S]*?)&lt;\/style&gt;/gi;
     const styles: string[] = [];
     let match;
-    
-    // First check if there are escaped style tags
-    console.log('Checking for escaped styles:', decodedContent.includes('&lt;style'));
     
     // Collect all style tags
     while ((match = styleRegex.exec(decodedContent)) !== null) {
       styles.push(match[0]);
-      console.log('Found style tag:', match[0].substring(0, 50) + '...');
     }
     
     // If no regular style tags found, check for escaped ones
     if (styles.length === 0 && decodedContent.includes('&lt;style')) {
-      console.log('No regular style tags, but found escaped ones. Content might be double-encoded.');
       // Try one more level of decoding
       const textarea = document.createElement('textarea');
       textarea.innerHTML = decodedContent;
@@ -193,7 +182,6 @@ export function sanitizeEmailContent(content: string): string {
       styleRegex.lastIndex = 0;
       while ((match = styleRegex.exec(doubleDecoded)) !== null) {
         styles.push(match[0]);
-        console.log('Found style tag after double decode:', match[0].substring(0, 50) + '...');
       }
       
       if (styles.length > 0) {
@@ -212,13 +200,6 @@ export function sanitizeEmailContent(content: string): string {
     styles.forEach((styleTag, index) => {
       // Replace one placeholder at a time to ensure proper ordering
       finalContent = finalContent.replace('<!-- STYLE_PLACEHOLDER -->', styleTag);
-    });
-    
-    console.log('Style preservation:', {
-      stylesExtracted: styles.length,
-      placeholdersInSanitized: (sanitized.match(/<!-- STYLE_PLACEHOLDER -->/g) || []).length,
-      finalHasStyles: finalContent.includes('<style'),
-      firstStyleInFinal: finalContent.indexOf('<style') !== -1 ? finalContent.substring(finalContent.indexOf('<style'), finalContent.indexOf('<style') + 100) : 'none'
     });
     
     sanitized = finalContent;
@@ -240,10 +221,6 @@ export function sanitizeEmailContent(content: string): string {
       }
       return `<a ${attrs}>`;
     });
-    
-    console.log('=== sanitizeEmailContent END ===');
-    console.log('Output has <style:', processedContent.includes('<style'));
-    console.log('Output preview:', processedContent.substring(0, 200));
     
     return processedContent;
   } catch (error) {
