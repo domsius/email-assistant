@@ -169,16 +169,16 @@ class EmailDTO
             });
 
             if ($attachment) {
-                // Replace with API URL
-                $apiUrl = "/api/emails/{$email->id}/inline/{$contentId}";
+                // Replace with web route URL (uses session authentication)
+                $webUrl = "/emails/{$email->id}/inline/{$contentId}";
                 
                 Log::info('EmailDTO: Found matching attachment', [
                     'attachment_id' => $attachment->id,
                     'attachment_content_id' => $attachment->content_id,
-                    'api_url' => $apiUrl,
+                    'web_url' => $webUrl,
                 ]);
 
-                return 'src="'.$apiUrl.'"';
+                return 'src="'.$webUrl.'"';
             }
 
             Log::info('EmailDTO: No matching attachment found for CID', [

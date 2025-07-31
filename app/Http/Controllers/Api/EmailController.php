@@ -262,7 +262,9 @@ class EmailController extends Controller
         }
 
         // Ensure user has access to this email
-        $this->authorize('view', $email);
+        if ($email->emailAccount->company_id !== auth()->user()->company_id) {
+            abort(403);
+        }
 
         // Check if we have a storage path
         if (!$attachment->storage_path) {
@@ -297,7 +299,9 @@ class EmailController extends Controller
             }
             
             // Ensure user has access to this email
-            $this->authorize('view', $email);
+            if ($email->emailAccount->company_id !== auth()->user()->company_id) {
+                abort(403);
+            }
 
             // Find attachment by content ID
             $attachment = $email->attachments()

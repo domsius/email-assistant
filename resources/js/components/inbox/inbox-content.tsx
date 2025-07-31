@@ -143,7 +143,7 @@ export function InboxContent({ pagination }: InboxContentProps) {
     (attachmentId: string) => {
       // Create a download link for the attachment
       window.open(
-        `/api/emails/${selectedEmail?.id}/attachments/${attachmentId}/download`,
+        `/emails/${selectedEmail?.id}/attachments/${attachmentId}/download`,
         "_blank",
       );
     },

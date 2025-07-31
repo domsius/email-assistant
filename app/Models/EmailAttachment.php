@@ -22,6 +22,8 @@ class EmailAttachment extends Model
     protected $casts = [
         'size' => 'integer',
     ];
+    
+    protected $appends = ['formatted_size', 'download_url'];
 
     public function emailMessage(): BelongsTo
     {
@@ -49,5 +51,10 @@ class EmailAttachment extends Model
         } else {
             return round($size / 1048576, 1).' MB';
         }
+    }
+    
+    public function getDownloadUrlAttribute(): string
+    {
+        return "/emails/{$this->email_message_id}/attachments/{$this->id}/download";
     }
 }
