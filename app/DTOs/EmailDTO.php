@@ -8,6 +8,7 @@ use App\Enums\EmailUrgency;
 use App\Models\EmailMessage;
 use App\Services\HtmlSanitizerService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class EmailDTO
 {
@@ -113,9 +114,25 @@ class EmailDTO
     {
         $sanitizer = app(HtmlSanitizerService::class);
 
+        // Debug logging
+        Log::info('EmailDTO: Processing HTML', [
+            'has_email' => $email !== null,
+            'has_attachments_loaded' => $email ? $email->relationLoaded('attachments') : false,
+            'attachment_count' => $email ? $email->attachments->count() : 0,
+            'has_cid_urls' => str_contains($html, 'cid:'),
+            'html_preview' => substr($html, 0, 500),
+        ]);
+
         // Replace CID URLs with actual URLs if we have the email model
         if ($email && $email->relationLoaded('attachments')) {
+            $originalHtml = $html;
             $html = self::replaceCidUrls($html, $email);
+            
+            Log::info('EmailDTO: CID replacement result', [
+                'original_has_cid' => str_contains($originalHtml, 'cid:'),
+                'result_has_cid' => str_contains($html, 'cid:'),
+                'html_changed' => $originalHtml !== $html,
+            ]);
         }
 
         return self::sanitizeText($sanitizer->sanitize($html));
@@ -129,8 +146,20 @@ class EmailDTO
         // Find all cid: URLs in the HTML
         $pattern = '/src=["\']?cid:([^"\'\s>]+)["\']?/i';
 
+        Log::info('EmailDTO: Starting CID replacement', [
+            'email_id' => $email->id,
+            'pattern' => $pattern,
+            'attachment_count' => $email->attachments->count(),
+            'attachment_content_ids' => $email->attachments->pluck('content_id')->toArray(),
+        ]);
+
         return preg_replace_callback($pattern, function ($matches) use ($email) {
             $contentId = $matches[1];
+            
+            Log::info('EmailDTO: Found CID match', [
+                'full_match' => $matches[0],
+                'content_id' => $contentId,
+            ]);
 
             // Find the attachment with this content ID
             $attachment = $email->attachments->first(function ($att) use ($contentId) {
@@ -142,9 +171,26 @@ class EmailDTO
             if ($attachment) {
                 // Replace with API URL
                 $apiUrl = "/api/emails/{$email->id}/inline/{$contentId}";
+                
+                Log::info('EmailDTO: Found matching attachment', [
+                    'attachment_id' => $attachment->id,
+                    'attachment_content_id' => $attachment->content_id,
+                    'api_url' => $apiUrl,
+                ]);
 
                 return 'src="'.$apiUrl.'"';
             }
+
+            Log::info('EmailDTO: No matching attachment found for CID', [
+                'content_id' => $contentId,
+                'available_attachments' => $email->attachments->map(function($att) {
+                    return [
+                        'id' => $att->id,
+                        'content_id' => $att->content_id,
+                        'filename' => $att->filename,
+                    ];
+                })->toArray(),
+            ]);
 
             // If no attachment found, return original
             return $matches[0];

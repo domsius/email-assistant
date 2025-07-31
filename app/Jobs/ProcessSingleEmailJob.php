@@ -45,10 +45,7 @@ class ProcessSingleEmailJob implements ShouldQueue
      */
     public function handle(EmailProviderFactory $providerFactory): void
     {
-        Log::info('Processing single email', [
-            'account_id' => $this->emailAccount->id,
-            'message_id' => $this->messageId,
-        ]);
+
 
         try {
             // Check if email already exists

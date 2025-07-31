@@ -145,20 +145,13 @@ class EmailAccountController extends Controller
             // Store state for security
             $state = Str::random(40);
 
-            Log::info('Storing OAuth state in web controller', [
-                'account_id' => $emailAccount->id,
-                'state' => $state,
-                'provider' => $provider,
-            ]);
+
 
             $emailAccount->update([
                 'oauth_state' => $state,
             ]);
 
-            Log::info('OAuth state stored successfully in web controller', [
-                'account_id' => $emailAccount->id,
-                'state_in_db' => $emailAccount->fresh()->oauth_state,
-            ]);
+
 
             // Get OAuth URL with state parameter properly set
             $authUrl = $providerService->getAuthUrl($redirectUri, $state);

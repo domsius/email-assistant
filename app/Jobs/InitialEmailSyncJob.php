@@ -51,10 +51,7 @@ class InitialEmailSyncJob implements ShouldQueue
     {
         // Set max initial sync from config
         $this->maxInitialSync = config('mail-sync.sync_email_limit', 200);
-        Log::info('Starting initial email sync', [
-            'account_id' => $this->emailAccount->id,
-            'email' => $this->emailAccount->email_address,
-        ]);
+
 
         try {
             // Mark sync as started
@@ -80,11 +77,7 @@ class InitialEmailSyncJob implements ShouldQueue
                 'sync_total' => $messagesToSync,
             ]);
 
-            Log::info('Total messages to sync', [
-                'account_id' => $this->emailAccount->id,
-                'total_in_account' => $totalMessages,
-                'will_sync' => $messagesToSync,
-            ]);
+
 
             // Sync emails in batches with progress updates
             $processedTotal = 0;
@@ -108,12 +101,7 @@ class InitialEmailSyncJob implements ShouldQueue
                         'sync_progress' => $processedTotal,
                     ]);
 
-                    Log::info('Sync progress update', [
-                        'account_id' => $this->emailAccount->id,
-                        'processed' => $processedTotal,
-                        'total' => $messagesToSync,
-                        'percentage' => $messagesToSync > 0 ? round(($processedTotal / $messagesToSync) * 100, 2) : 0,
-                    ]);
+
 
                     $hasMore = $result['has_more'] ?? false;
                     $pageToken = $result['next_page_token'] ?? null;
@@ -135,13 +123,7 @@ class InitialEmailSyncJob implements ShouldQueue
                 'last_sync_at' => now(),
             ]);
 
-            Log::info('Initial email sync completed', [
-                'account_id' => $this->emailAccount->id,
-                'total_processed' => $processedTotal,
-                'note' => $totalMessages > $this->maxInitialSync
-                    ? "Limited to {$this->maxInitialSync} most recent emails. Total account has {$totalMessages} emails."
-                    : 'All emails synced',
-            ]);
+
 
         } catch (\Exception $e) {
             Log::error('Initial email sync failed', [

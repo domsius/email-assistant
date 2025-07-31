@@ -13,6 +13,7 @@ use App\Services\AttachmentStorageService;
 use App\Services\LanguageDetectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class EmailController extends Controller
 {
@@ -289,14 +290,20 @@ class EmailController extends Controller
      */
     public function getInlineImage(EmailMessage $email, string $contentId)
     {
-        // Ensure user has access to this email
-        $this->authorize('view', $email);
+        try {
+            // Load the email account relationship if not already loaded
+            if (!$email->relationLoaded('emailAccount')) {
+                $email->load('emailAccount');
+            }
+            
+            // Ensure user has access to this email
+            $this->authorize('view', $email);
 
-        // Find attachment by content ID
-        $attachment = $email->attachments()
-            ->where('content_id', $contentId)
-            ->orWhere('content_id', 'like', '%'.$contentId.'%')
-            ->first();
+            // Find attachment by content ID
+            $attachment = $email->attachments()
+                ->where('content_id', $contentId)
+                ->orWhere('content_id', 'like', '%'.$contentId.'%')
+                ->first();
 
         if (! $attachment) {
             // Return a placeholder image when attachment not found
@@ -334,5 +341,21 @@ class EmailController extends Controller
             'Cache-Control' => 'public, max-age=3600',
             'Content-Length' => strlen($content),
         ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to get inline image', [
+                'email_id' => $email->id,
+                'content_id' => $contentId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Return a generic error placeholder image
+            return response()->stream(function () {
+                $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+                echo $image;
+            }, 500, [
+                'Content-Type' => 'image/png',
+            ]);
+        }
     }
 }

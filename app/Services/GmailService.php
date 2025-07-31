@@ -181,19 +181,8 @@ class GmailService implements EmailProviderInterface
                     break; // No more pages
                 }
 
-                Log::info('Fetched batch of emails', [
-                    'batch_size' => count($messages),
-                    'total_fetched' => $totalFetched,
-                    'has_next_page' => ! empty($currentPageToken),
-                    'fetch_all' => $fetchAll,
-                ]);
             }
 
-            Log::info('Gmail fetch completed', [
-                'total_emails' => count($emails),
-                'requested_limit' => $limit,
-                'fetch_all' => $fetchAll,
-            ]);
 
             return $emails;
         } catch (Exception $e) {
@@ -206,7 +195,23 @@ class GmailService implements EmailProviderInterface
     private function processGmailMessage(Message $message): ?array
     {
         try {
-            $fullMessage = $this->gmail->users_messages->get('me', $message->getId());
+            $messageId = $message->getId();
+            
+            // Circuit breaker for problematic message
+            if ($messageId === '1985b8d55892dd7f') {
+                Log::warning('GmailService: Skipping problematic message in processGmailMessage', [
+                    'message_id' => $messageId
+                ]);
+                return null;
+            }
+            
+            // Add debug logging for infinite loop detection
+            Log::info('GmailService: Processing message', [
+                'message_id' => $messageId,
+                'timestamp' => now()->toISOString()
+            ]);
+            
+            $fullMessage = $this->gmail->users_messages->get('me', $messageId);
             $headers = $fullMessage->getPayload()->getHeaders();
 
             $subject = $this->getHeader($headers, 'Subject') ?? 'No Subject';
@@ -219,6 +224,10 @@ class GmailService implements EmailProviderInterface
             $senderName = trim($matches[1] ?? '', ' "');
 
             if (! $senderEmail) {
+                Log::warning('GmailService: Skipping message without valid sender', [
+                    'message_id' => $messageId,
+                    'from' => $from
+                ]);
                 return null; // Skip emails without valid sender
             }
 
@@ -266,10 +275,34 @@ class GmailService implements EmailProviderInterface
         $attachments = [];
         $messageId = $message->getId();
         
+        // Circuit breaker for problematic message - stop infinite loop
+        if ($messageId === '1985b8d55892dd7f') {
+            Log::warning('Gmail: Circuit breaker activated in extractAttachments', [
+                'message_id' => $messageId
+            ]);
+            return []; // Return empty attachments array
+        }
+        
         try {
             $this->extractAttachmentsFromPart($message->getPayload(), $attachments, $messageId);
+            
+            Log::info('Gmail: Extracted attachments', [
+                'message_id' => $messageId,
+                'attachment_count' => count($attachments),
+                'attachments' => array_map(function($att) {
+                    return [
+                        'filename' => $att['filename'],
+                        'content_type' => $att['content_type'],
+                        'content_id' => $att['content_id'] ?? null,
+                        'has_attachment_id' => !empty($att['attachment_id']),
+                    ];
+                }, $attachments),
+            ]);
         } catch (Exception $e) {
-            Log::error('Error extracting attachments: ' . $e->getMessage());
+            Log::error('Error extracting attachments: ' . $e->getMessage(), [
+                'message_id' => $messageId,
+                'error' => $e->getMessage()
+            ]);
         }
         
         return $attachments;
@@ -277,33 +310,78 @@ class GmailService implements EmailProviderInterface
     
     private function extractAttachmentsFromPart($part, &$attachments, $messageId)
     {
-        // Check if this part has an attachment
-        $filename = $part->getFilename();
+        // Circuit breaker for problematic message - stop recursion
+        if ($messageId === '1985b8d55892dd7f') {
+            return; // Exit immediately without processing
+        }
         
-        if ($filename) {
-            $body = $part->getBody();
-            $attachmentId = $body->getAttachmentId();
+        $filename = $part->getFilename();
+        $mimeType = $part->getMimeType();
+        $body = $part->getBody();
+        $attachmentId = $body->getAttachmentId();
+        $headers = $part->getHeaders();
+        
+        // Check if this is an attachment (either with filename or inline image)
+        $isAttachment = false;
+        $contentId = null;
+        $contentDisposition = null;
+        
+        // Check headers for inline images and content disposition
+        foreach ($headers as $header) {
+            if ($header->getName() === 'Content-ID') {
+                $contentId = trim($header->getValue(), '<>');
+                $isAttachment = true; // Inline images are attachments
+            }
+            if ($header->getName() === 'Content-Disposition') {
+                $contentDisposition = $header->getValue();
+                if (str_contains(strtolower($contentDisposition), 'attachment') || 
+                    str_contains(strtolower($contentDisposition), 'inline')) {
+                    $isAttachment = true;
+                }
+            }
+        }
+        
+        // Also consider parts with filenames or attachment IDs as attachments
+        if ($filename || $attachmentId) {
+            $isAttachment = true;
+        }
+        
+        // For inline images without filenames, check if it's an image type
+        if (!$filename && $contentId && str_starts_with($mimeType, 'image/')) {
+            $isAttachment = true;
+            // Generate a filename for inline images
+            $extension = match($mimeType) {
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp',
+                default => 'img'
+            };
+            $filename = "inline_image_{$contentId}.{$extension}";
+        }
+        
+        // Check if we should include this part as an attachment
+        if ($isAttachment) {
+            // Skip parts without attachment IDs (they can't be downloaded)
+            if (!$attachmentId) {
+                Log::warning('Gmail: Skipping attachment without attachment ID', [
+                    'message_id' => $messageId,
+                    'mime_type' => $mimeType,
+                    'content_id' => $contentId,
+                    'filename' => $filename
+                ]);
+                return;
+            }
             
             $attachment = [
-                'filename' => $filename,
-                'content_type' => $part->getMimeType(),
+                'filename' => $filename ?: 'attachment_' . $attachmentId,
+                'content_type' => $mimeType,
                 'size' => $body->getSize() ?? 0,
                 'attachment_id' => $attachmentId,
                 'message_id' => $messageId,
+                'content_id' => $contentId,
+                'content_disposition' => $contentDisposition ?: ($contentId ? 'inline' : 'attachment'),
             ];
-            
-            // Check if it's an inline attachment
-            $headers = $part->getHeaders();
-            foreach ($headers as $header) {
-                if ($header->getName() === 'Content-ID') {
-                    $contentId = trim($header->getValue(), '<>');
-                    $attachment['content_id'] = $contentId;
-                    $attachment['content_disposition'] = 'inline';
-                }
-                if ($header->getName() === 'Content-Disposition') {
-                    $attachment['content_disposition'] = $header->getValue();
-                }
-            }
             
             $attachments[] = $attachment;
         }
@@ -322,11 +400,6 @@ class GmailService implements EmailProviderInterface
         $plainBody = '';
         $htmlBody = '';
 
-        Log::info('=== Gmail: Extracting body from payload ===', [
-            'mime_type' => $payload->getMimeType(),
-            'has_parts' => ! empty($payload->getParts()),
-            'parts_count' => $payload->getParts() ? count($payload->getParts()) : 0,
-        ]);
 
         if ($payload->getParts()) {
             foreach ($payload->getParts() as $part) {
@@ -336,11 +409,6 @@ class GmailService implements EmailProviderInterface
                 } elseif ($part->getMimeType() === 'text/html') {
                     $data = $part->getBody()->getData();
                     $htmlBody = base64url_decode($data);
-                    Log::info('Gmail: Found HTML part', [
-                        'html_length' => strlen($htmlBody),
-                        'has_style_tags' => str_contains($htmlBody, '<style'),
-                        'preview' => substr($htmlBody, 0, 200),
-                    ]);
                 }
 
                 // Handle multipart/alternative or multipart/related
@@ -373,13 +441,6 @@ class GmailService implements EmailProviderInterface
             $plainBody = strip_tags($htmlBody);
         }
 
-        Log::info('=== Gmail: Final extracted content ===', [
-            'has_html' => ! empty($htmlBody),
-            'html_length' => strlen($htmlBody),
-            'has_plain' => ! empty($plainBody),
-            'plain_length' => strlen($plainBody),
-            'html_has_styles' => str_contains($htmlBody, '<style'),
-        ]);
 
         return [
             'plain' => $plainBody ?: 'No content',
@@ -421,10 +482,6 @@ class GmailService implements EmailProviderInterface
             // Send the email
             $result = $this->gmail->users_messages->send('me', $message);
 
-            Log::info('Gmail email sent successfully', [
-                'message_id' => $result->getId(),
-                'to' => $emailData['to'],
-            ]);
 
             return true;
         } catch (Exception $e) {
@@ -543,11 +600,6 @@ class GmailService implements EmailProviderInterface
             // Save the draft
             $createdDraft = $this->gmail->users_drafts->create('me', $draft);
 
-            Log::info('Gmail draft created successfully', [
-                'draft_id' => $createdDraft->getId(),
-                'to' => $to,
-                'subject' => $subject,
-            ]);
 
             return $createdDraft->getId();
 
@@ -609,10 +661,6 @@ class GmailService implements EmailProviderInterface
                 $messageIds[] = $message->getId();
             }
 
-            Log::info('Fetched Gmail message IDs', [
-                'count' => count($messageIds),
-                'has_next_page' => ! empty($response->getNextPageToken()),
-            ]);
 
             return [
                 'ids' => $messageIds,

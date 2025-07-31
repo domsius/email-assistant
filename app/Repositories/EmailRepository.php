@@ -7,6 +7,7 @@ use App\Models\EmailAccount;
 use App\Models\EmailMessage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Log;
 
 class EmailRepository
 {
@@ -54,7 +55,7 @@ class EmailRepository
         $page = $cursor ? (int) $cursor : null;
 
         // Log the query for debugging
-        \Log::info('Email query SQL:', [
+        Log::info('Email query SQL:', [
             'sql' => $query->toSql(),
             'bindings' => $query->getBindings(),
         ]);
@@ -65,7 +66,7 @@ class EmailRepository
         // Log first email data
         if ($paginator->count() > 0) {
             $firstEmail = $paginator->first();
-            \Log::info('First paginated email:', [
+            Log::info('First paginated email:', [
                 'id' => $firstEmail->id,
                 'has_body_content' => ! empty($firstEmail->body_content),
                 'has_body_html' => ! empty($firstEmail->body_html),

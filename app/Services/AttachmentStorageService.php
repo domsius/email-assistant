@@ -169,7 +169,7 @@ class AttachmentStorageService
         $storagePath = "attachments/{$emailAccountId}/" . date('Y/m/d') . "/{$hash}.{$extension}";
         
         // Store the file
-        if ($this->disk->put($storagePath, $content)) {
+        if (Storage::disk($this->disk)->put($storagePath, $content)) {
             return $storagePath;
         }
         

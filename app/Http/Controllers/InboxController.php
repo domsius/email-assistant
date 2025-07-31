@@ -16,17 +16,7 @@ class InboxController extends Controller
 
     public function index(Request $request): Response
     {
-        // Log all request data
-        Log::info('InboxController request data:', [
-            'all' => $request->all(),
-            'query' => $request->query(),
-            'method' => $request->method(),
-            'url' => $request->fullUrl(),
-            'headers' => $request->headers->all(),
-            'is_inertia' => $request->header('X-Inertia'),
-            'only' => $request->header('X-Inertia-Partial-Data'),
-            'component' => $request->header('X-Inertia-Partial-Component'),
-        ]);
+
 
         // Validate input parameters
         $validated = $request->validate([
@@ -69,18 +59,10 @@ class InboxController extends Controller
         $page = $validated['page'] ?? 1;
         $perPage = $validated['per_page'] ?? 5;
 
-        Log::info('Pagination params:', [
-            'page' => $page,
-            'per_page' => $perPage,
-            'validated' => $validated,
-        ]);
+
         // Get filter from query params or validated data
         $filter = $request->query('filter') ?? $validated['filter'] ?? 'all';
-        Log::info('InboxController filter:', [
-            'request_filter' => $request->input('filter'),
-            'validated_filter' => $validated['filter'] ?? null,
-            'final_filter' => $filter,
-        ]);
+
 
         try {
             // Get paginated emails
@@ -103,11 +85,7 @@ class InboxController extends Controller
                 $selectedAccountId ? (int) $selectedAccountId : null
             );
 
-            Log::info('Returning inbox data:', [
-                'email_count' => count($emailsData['data']),
-                'filter' => $filter,
-                'folder' => $folder,
-            ]);
+
 
             return Inertia::render('inbox', [
                 'emails' => $emailsData['data'],

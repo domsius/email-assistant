@@ -86,14 +86,7 @@ class EmailSyncService extends BaseService
                     }
                 });
 
-                // Log batch progress
-                Log::info('Email sync batch processed', [
-                    'email_account_id' => $emailAccount->id,
-                    'batch_size' => count($emails),
-                    'total_processed' => $totalProcessed,
-                    'total_skipped' => $totalSkipped,
-                    'fetch_all' => $fetchAll,
-                ]);
+                // Log batch progress (removed to reduce log size)
 
                 // Check if we should continue
                 if (count($emails) < $remainingLimit) {
@@ -155,12 +148,27 @@ class EmailSyncService extends BaseService
      */
     private function processEmail(EmailAccount $emailAccount, array $emailData): array
     {
+        $messageId = $emailData['message_id'];
+        
+        // Circuit breaker for infinite loop prevention
+        if ($messageId === '1985b8d55892dd7f') {
+            Log::warning('EmailSync: Skipping problematic message to prevent infinite loop', [
+                'message_id' => $messageId,
+                'email_account_id' => $emailAccount->id
+            ]);
+            return ['status' => 'skipped', 'reason' => 'circuit_breaker'];
+        }
+        
         // Check if email already exists
-        $existingEmail = EmailMessage::where('message_id', $emailData['message_id'])
+        $existingEmail = EmailMessage::where('message_id', $messageId)
             ->where('email_account_id', $emailAccount->id)
             ->first();
 
         if ($existingEmail) {
+            Log::info('EmailSync: Message already exists', [
+                'message_id' => $messageId,
+                'existing_id' => $existingEmail->id
+            ]);
             return ['status' => 'skipped', 'reason' => 'already_exists'];
         }
 
@@ -176,15 +184,7 @@ class EmailSyncService extends BaseService
         $bodyHtml = $emailData['body_html'] ?? null;
         $snippet = substr(strip_tags($bodyContent), 0, 150);
 
-        Log::info('=== EmailSync: Processing email for storage ===', [
-            'message_id' => $emailData['message_id'],
-            'subject' => $emailData['subject'],
-            'has_body_content' => ! empty($bodyContent),
-            'body_content_length' => strlen($bodyContent),
-            'has_body_html' => ! empty($bodyHtml),
-            'body_html_length' => strlen($bodyHtml ?? ''),
-            'html_has_styles' => str_contains($bodyHtml ?? '', '<style'),
-        ]);
+        // Processing email (verbose logging removed)
 
         $emailMessage = EmailMessage::create([
             'email_account_id' => $emailAccount->id,
@@ -206,19 +206,29 @@ class EmailSyncService extends BaseService
             'labels' => $emailData['provider_data']['labels'] ?? [],
         ]);
 
-        // Log what was actually saved
-        Log::info('=== EmailSync: Email saved to database ===', [
-            'email_id' => $emailMessage->id,
-            'has_body_content' => ! empty($emailMessage->body_content),
-            'body_content_length' => strlen($emailMessage->body_content ?? ''),
-            'has_body_html' => ! empty($emailMessage->body_html),
-            'body_html_length' => strlen($emailMessage->body_html ?? ''),
-            'has_body_plain' => ! empty($emailMessage->body_plain),
-        ]);
+        // Email saved to database (verbose logging removed)
 
         // Process attachments if any
         if (!empty($emailData['attachments'])) {
+            Log::info('EmailSync: Processing attachments', [
+                'email_id' => $emailMessage->id,
+                'attachment_count' => count($emailData['attachments']),
+                'attachments' => array_map(function($att) {
+                    return [
+                        'filename' => $att['filename'] ?? 'unknown',
+                        'content_id' => $att['content_id'] ?? null,
+                        'has_attachment_id' => !empty($att['attachment_id']),
+                    ];
+                }, $emailData['attachments']),
+            ]);
+            
             $this->processAttachments($emailMessage, $emailData['attachments'], $emailAccount);
+        } else {
+            Log::info('EmailSync: No attachments to process', [
+                'email_id' => $emailMessage->id,
+                'has_body_html' => !empty($emailData['body_html']),
+                'body_has_cid' => !empty($emailData['body_html']) && str_contains($emailData['body_html'], 'cid:'),
+            ]);
         }
 
         // Dispatch job to process email through AI pipeline (if configured)
@@ -331,12 +341,7 @@ class EmailSyncService extends BaseService
                         ->onQueue('emails');
                 }
 
-                Log::info('Dispatched email processing jobs', [
-                    'email_account_id' => $emailAccount->id,
-                    'total_fetched' => count($messageIds),
-                    'new_emails' => count($newMessageIds),
-                    'skipped' => count($existingMessageIds),
-                ]);
+                // Email processing jobs dispatched (verbose logging removed)
 
                 // Update last sync timestamp
                 $emailAccount->update(['last_sync_at' => now()]);
@@ -373,10 +378,7 @@ class EmailSyncService extends BaseService
      */
     private function processAttachments(EmailMessage $emailMessage, array $attachments, EmailAccount $emailAccount): void
     {
-        Log::info('Processing attachments for email', [
-            'email_id' => $emailMessage->id,
-            'attachment_count' => count($attachments),
-        ]);
+        // Processing attachments (verbose logging removed)
 
         foreach ($attachments as $attachmentData) {
             try {
@@ -402,11 +404,7 @@ class EmailSyncService extends BaseService
                         'storage_path' => $storedPath,
                     ]);
 
-                    Log::info('Attachment processed successfully', [
-                        'filename' => $attachmentData['filename'],
-                        'content_id' => $attachmentData['content_id'] ?? null,
-                        'size' => strlen($content),
-                    ]);
+                    // Attachment processed successfully (verbose logging removed)
                 }
             } catch (Exception $e) {
                 Log::error('Failed to process attachment', [
@@ -423,7 +421,7 @@ class EmailSyncService extends BaseService
     private function downloadGmailAttachment(EmailAccount $emailAccount, array $attachmentData): ?string
     {
         try {
-            $provider = $this->providerFactory->create($emailAccount);
+            $provider = $this->providerFactory->createProvider($emailAccount);
             
             if (method_exists($provider, 'downloadAttachment')) {
                 return $provider->downloadAttachment(

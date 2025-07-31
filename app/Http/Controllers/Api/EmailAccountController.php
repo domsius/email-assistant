@@ -81,11 +81,7 @@ class EmailAccountController extends Controller
         $redirectUri = url("/api/email-accounts/oauth/callback/{$request->provider}");
 
         try {
-            Log::info('Creating OAuth provider for account', [
-                'account_id' => $emailAccount->id,
-                'provider' => $request->provider,
-                'email' => $request->email_address,
-            ]);
+
 
             $provider = $this->providerFactory->createProvider($emailAccount);
             $authUrl = $provider->getAuthUrl($redirectUri);
@@ -93,20 +89,13 @@ class EmailAccountController extends Controller
             // Store state for security
             $state = Str::random(40);
 
-            Log::info('Storing OAuth state', [
-                'account_id' => $emailAccount->id,
-                'state' => $state,
-                'provider' => $request->provider,
-            ]);
+
 
             $emailAccount->update([
                 'oauth_state' => $state,
             ]);
 
-            Log::info('OAuth state stored successfully', [
-                'account_id' => $emailAccount->id,
-                'state_in_db' => $emailAccount->fresh()->oauth_state,
-            ]);
+
 
             return response()->json([
                 'auth_url' => $authUrl.'&state='.$state,
@@ -130,40 +119,23 @@ class EmailAccountController extends Controller
      */
     public function handleOAuthCallback(Request $request, string $provider)
     {
-        Log::info('OAuth callback received', [
-            'provider' => $provider,
-            'code' => substr($request->code ?? 'missing', 0, 20).'...',
-            'state' => $request->state ?? 'missing',
-            'all_params' => $request->all(),
-        ]);
+
 
         $request->validate([
             'code' => 'required|string',
             'state' => 'required|string',
         ]);
 
-        Log::info('Looking for email account by OAuth state', [
-            'provider' => $provider,
-            'state' => $request->state,
-        ]);
 
-        // Debug: Check all accounts with oauth_state
-        $allAccountsWithState = EmailAccount::whereNotNull('oauth_state')->get(['id', 'email_address', 'provider', 'oauth_state']);
-        Log::info('All accounts with oauth_state in database', [
-            'accounts' => $allAccountsWithState->toArray(),
-        ]);
+
+
 
         // Find email account by state
         $emailAccount = EmailAccount::where('oauth_state', $request->state)
             ->where('provider', $provider)
             ->first();
 
-        Log::info('Email account found for OAuth', [
-            'account_id' => $emailAccount->id ?? 'not found',
-            'email' => $emailAccount->email_address ?? 'not found',
-            'state' => $request->state,
-            'found' => $emailAccount ? 'yes' : 'no',
-        ]);
+
 
         if (! $emailAccount) {
             return redirect('/email-accounts')->withErrors(['oauth' => 'Invalid OAuth state']);
@@ -200,10 +172,7 @@ class EmailAccountController extends Controller
                     'oauth_state' => null,
                 ]);
 
-                Log::info('OAuth successful, dispatching initial email sync job', [
-                    'account_id' => $emailAccount->id,
-                    'email' => $actualEmail,
-                ]);
+
 
                 // Dispatch initial full sync job
                 \App\Jobs\InitialEmailSyncJob::dispatch($emailAccount);
