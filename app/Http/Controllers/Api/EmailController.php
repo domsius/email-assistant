@@ -310,6 +310,13 @@ class EmailController extends Controller
                 ->first();
 
         if (! $attachment) {
+            Log::warning('Inline image attachment not found', [
+                'email_id' => $email->id,
+                'content_id' => $contentId,
+                'total_attachments' => $email->attachments()->count(),
+                'attachment_content_ids' => $email->attachments()->pluck('content_id')->toArray(),
+            ]);
+            
             // Return a placeholder image when attachment not found
             return response()->stream(function () {
                 // A simple red placeholder image
@@ -323,6 +330,13 @@ class EmailController extends Controller
 
         // Check if we have a storage path
         if (!$attachment->storage_path) {
+            Log::warning('Inline image has no storage path', [
+                'email_id' => $email->id,
+                'attachment_id' => $attachment->id,
+                'content_id' => $contentId,
+                'filename' => $attachment->filename,
+            ]);
+            
             // Return a placeholder if no file stored
             return response()->stream(function () {
                 $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
@@ -337,6 +351,16 @@ class EmailController extends Controller
         $content = $this->attachmentStorage->getContent($attachment->storage_path);
         
         if (!$content) {
+            Log::error('Failed to read inline image file', [
+                'email_id' => $email->id,
+                'attachment_id' => $attachment->id,
+                'content_id' => $contentId,
+                'storage_path' => $attachment->storage_path,
+                'disk' => config('mail.attachments.disk', 'local'),
+                'base_path' => storage_path('app'),
+                'full_path' => storage_path('app/' . $attachment->storage_path),
+            ]);
+            
             abort(404, 'Image file not found');
         }
 

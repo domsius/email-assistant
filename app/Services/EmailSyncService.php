@@ -385,6 +385,14 @@ class EmailSyncService extends BaseService
                 // Download attachment content from Gmail
                 $content = $this->downloadGmailAttachment($emailAccount, $attachmentData);
                 
+                Log::info('EmailSync: Downloaded attachment', [
+                    'email_id' => $emailMessage->id,
+                    'filename' => $attachmentData['filename'],
+                    'content_id' => $attachmentData['content_id'] ?? null,
+                    'content_size' => $content ? strlen($content) : 0,
+                    'has_content' => $content !== null,
+                ]);
+                
                 if ($content) {
                     // Store the attachment file
                     $storedPath = $this->attachmentStorage->storeAttachmentContent(

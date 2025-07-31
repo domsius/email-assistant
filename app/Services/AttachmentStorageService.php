@@ -6,6 +6,7 @@ use App\Models\EmailAttachment;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class AttachmentStorageService
 {
@@ -68,6 +69,12 @@ class AttachmentStorageService
     public function getContent(string $path): ?string
     {
         if (!Storage::disk($this->disk)->exists($path)) {
+            \Log::warning('AttachmentStorage: File does not exist', [
+                'path' => $path,
+                'disk' => $this->disk,
+                'full_path' => Storage::disk($this->disk)->path($path),
+                'cwd' => getcwd(),
+            ]);
             return null;
         }
         
@@ -168,8 +175,21 @@ class AttachmentStorageService
         $hash = hash('sha256', $content);
         $storagePath = "attachments/{$emailAccountId}/" . date('Y/m/d') . "/{$hash}.{$extension}";
         
+        Log::info('AttachmentStorage: Storing attachment', [
+            'filename' => $filename,
+            'extension' => $extension,
+            'hash' => $hash,
+            'storage_path' => $storagePath,
+            'content_size' => strlen($content),
+            'disk' => $this->disk,
+        ]);
+        
         // Store the file
         if (Storage::disk($this->disk)->put($storagePath, $content)) {
+            Log::info('AttachmentStorage: File stored successfully', [
+                'storage_path' => $storagePath,
+                'full_path' => Storage::disk($this->disk)->path($storagePath),
+            ]);
             return $storagePath;
         }
         
