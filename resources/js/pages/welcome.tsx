@@ -1,22 +1,28 @@
 import { type SharedData } from "@/types";
 import { Head, Link, usePage } from "@inertiajs/react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { 
-  Brain, 
-  Shield, 
-  Users, 
-  Mail, 
-  ArrowRight, 
+import {
+  Brain,
+  Shield,
+  Users,
+  Mail,
+  ArrowRight,
   CheckCircle2,
   Sparkles,
   Lock,
   Globe,
   BarChart3,
   MessageSquare,
-  Zap
+  Zap,
 } from "lucide-react";
 
 export default function Welcome() {
@@ -31,7 +37,7 @@ export default function Welcome() {
           rel="stylesheet"
         />
       </Head>
-      
+
       <div className="min-h-screen bg-[#FDFDFC] text-[#1b1b18] dark:bg-[#0a0a0a] dark:text-[#EDEDEC]">
         {/* Navigation */}
         <header className="sticky top-0 z-50 w-full border-b border-[#19140035] bg-[#FDFDFC]/80 backdrop-blur dark:border-[#3E3E3A] dark:bg-[#0a0a0a]/80">
@@ -42,13 +48,22 @@ export default function Welcome() {
                 <span className="text-xl font-semibold">EmailAI</span>
               </Link>
               <nav className="hidden gap-6 text-sm lg:flex">
-                <a href="#features" className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]">
+                <a
+                  href="#features"
+                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]"
+                >
                   Features
                 </a>
-                <a href="#how-it-works" className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]">
+                <a
+                  href="#how-it-works"
+                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]"
+                >
                   How it Works
                 </a>
-                <a href="#pricing" className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]">
+                <a
+                  href="#pricing"
+                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]"
+                >
                   Pricing
                 </a>
               </nav>
@@ -85,8 +100,9 @@ export default function Welcome() {
                   AI-Powered Email Management for Modern Teams
                 </h1>
                 <p className="mb-8 text-lg text-[#706f6c] dark:text-[#A1A09A] lg:text-xl">
-                  Transform your inbox with intelligent email processing, automated responses, 
-                  and advanced analytics. Save hours every week while never missing important messages.
+                  Transform your inbox with intelligent email processing,
+                  automated responses, and advanced analytics. Save hours every
+                  week while never missing important messages.
                 </p>
                 <div className="flex flex-col gap-4 sm:flex-row">
                   <Button size="lg" asChild>
@@ -116,14 +132,18 @@ export default function Welcome() {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="border-t border-[#19140035] px-4 py-24 dark:border-[#3E3E3A] lg:px-8">
+        <section
+          id="features"
+          className="border-t border-[#19140035] px-4 py-24 dark:border-[#3E3E3A] lg:px-8"
+        >
           <div className="container mx-auto max-w-6xl">
             <div className="mb-12 text-center">
               <h2 className="mb-4 text-3xl font-bold lg:text-4xl">
                 Everything you need to master your inbox
               </h2>
               <p className="mx-auto max-w-2xl text-lg text-[#706f6c] dark:text-[#A1A09A]">
-                Our AI-powered platform brings intelligence to every aspect of email management
+                Our AI-powered platform brings intelligence to every aspect of
+                email management
               </p>
             </div>
 
@@ -167,7 +187,9 @@ export default function Welcome() {
                   <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/20">
                     <Globe className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <CardTitle className="text-2xl">Universal Compatibility</CardTitle>
+                  <CardTitle className="text-2xl">
+                    Universal Compatibility
+                  </CardTitle>
                   <CardDescription>
                     Works seamlessly with all major email providers
                   </CardDescription>
@@ -200,7 +222,9 @@ export default function Welcome() {
                   <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/20">
                     <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
                   </div>
-                  <CardTitle className="text-2xl">Enterprise Security</CardTitle>
+                  <CardTitle className="text-2xl">
+                    Enterprise Security
+                  </CardTitle>
                   <CardDescription>
                     Bank-level security and privacy protection
                   </CardDescription>
@@ -264,7 +288,10 @@ export default function Welcome() {
         </section>
 
         {/* How It Works */}
-        <section id="how-it-works" className="border-t border-[#19140035] bg-white px-4 py-24 dark:border-[#3E3E3A] dark:bg-[#161615] lg:px-8">
+        <section
+          id="how-it-works"
+          className="border-t border-[#19140035] bg-white px-4 py-24 dark:border-[#3E3E3A] dark:bg-[#161615] lg:px-8"
+        >
           <div className="container mx-auto max-w-6xl">
             <div className="mb-12 text-center">
               <h2 className="mb-4 text-3xl font-bold lg:text-4xl">
@@ -281,7 +308,9 @@ export default function Welcome() {
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-2xl font-bold text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
                   1
                 </div>
-                <h3 className="mb-2 text-lg font-semibold">Connect Your Email</h3>
+                <h3 className="mb-2 text-lg font-semibold">
+                  Connect Your Email
+                </h3>
                 <p className="text-sm text-[#706f6c] dark:text-[#A1A09A]">
                   Securely connect your Gmail or Outlook account with OAuth2
                 </p>
@@ -324,13 +353,17 @@ export default function Welcome() {
         </section>
 
         {/* CTA Section */}
-        <section id="pricing" className="border-t border-[#19140035] px-4 py-24 dark:border-[#3E3E3A] lg:px-8">
+        <section
+          id="pricing"
+          className="border-t border-[#19140035] px-4 py-24 dark:border-[#3E3E3A] lg:px-8"
+        >
           <div className="container mx-auto max-w-4xl text-center">
             <h2 className="mb-4 text-3xl font-bold lg:text-4xl">
               Ready to transform your email workflow?
             </h2>
             <p className="mb-8 text-lg text-[#706f6c] dark:text-[#A1A09A]">
-              Join thousands of teams already using EmailAI to save time and improve productivity
+              Join thousands of teams already using EmailAI to save time and
+              improve productivity
             </p>
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <Button size="lg" asChild>
@@ -362,83 +395,119 @@ export default function Welcome() {
                   AI-powered email management for modern teams
                 </p>
               </div>
-              
+
               <div>
                 <h3 className="mb-3 font-semibold">Product</h3>
                 <ul className="space-y-2 text-sm">
                   <li>
-                    <a href="#features" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#features"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       Features
                     </a>
                   </li>
                   <li>
-                    <a href="#pricing" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#pricing"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       Pricing
                     </a>
                   </li>
                   <li>
-                    <a href="#" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       Security
                     </a>
                   </li>
                 </ul>
               </div>
-              
+
               <div>
                 <h3 className="mb-3 font-semibold">Company</h3>
                 <ul className="space-y-2 text-sm">
                   <li>
-                    <a href="#" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       About
                     </a>
                   </li>
                   <li>
-                    <a href="#" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       Blog
                     </a>
                   </li>
                   <li>
-                    <a href="#" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       Careers
                     </a>
                   </li>
                 </ul>
               </div>
-              
+
               <div>
                 <h3 className="mb-3 font-semibold">Legal</h3>
                 <ul className="space-y-2 text-sm">
                   <li>
-                    <a href="#" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       Privacy Policy
                     </a>
                   </li>
                   <li>
-                    <a href="#" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       Terms of Service
                     </a>
                   </li>
                   <li>
-                    <a href="#" className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]">
+                    <a
+                      href="#"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                    >
                       Cookie Policy
                     </a>
                   </li>
                 </ul>
               </div>
             </div>
-            
+
             <Separator className="my-8" />
-            
+
             <div className="flex flex-col items-center justify-between gap-4 text-sm text-[#706f6c] dark:text-[#A1A09A] sm:flex-row">
               <p>&copy; 2025 EmailAI. All rights reserved.</p>
               <div className="flex gap-4">
-                <a href="#" className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]">
+                <a
+                  href="#"
+                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]"
+                >
                   Twitter
                 </a>
-                <a href="#" className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]">
+                <a
+                  href="#"
+                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]"
+                >
                   LinkedIn
                 </a>
-                <a href="#" className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]">
+                <a
+                  href="#"
+                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]"
+                >
                   GitHub
                 </a>
               </div>

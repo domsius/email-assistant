@@ -36,7 +36,6 @@ export default function Inbox({
   error,
 }: InboxProps) {
   const { props } = usePage<InboxProps>();
-  
 
   // Use props directly for data that can be updated via partial reloads
   const currentEmails = props.emails || emails;

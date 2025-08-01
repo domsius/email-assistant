@@ -9,16 +9,23 @@ import { PlanCard } from "./plan-card";
 import { cn } from "@/lib/utils";
 
 interface RegisterFormProps extends React.HTMLAttributes<HTMLDivElement> {
-  plans: Record<string, {
-    name: string;
-    description: string;
-    price: number;
-    email_limit: number;
-    features: string[];
-  }>;
+  plans: Record<
+    string,
+    {
+      name: string;
+      description: string;
+      price: number;
+      email_limit: number;
+      features: string[];
+    }
+  >;
 }
 
-export function RegisterForm({ className, plans, ...props }: RegisterFormProps) {
+export function RegisterForm({
+  className,
+  plans,
+  ...props
+}: RegisterFormProps) {
   const { data, setData, post, processing, errors, reset } = useForm({
     name: "",
     email: "",
@@ -60,7 +67,9 @@ export function RegisterForm({ className, plans, ...props }: RegisterFormProps) 
             ))}
           </div>
           {errors.plan && (
-            <p className="text-sm text-destructive text-center">{errors.plan}</p>
+            <p className="text-sm text-destructive text-center">
+              {errors.plan}
+            </p>
           )}
         </div>
 
@@ -125,7 +134,9 @@ export function RegisterForm({ className, plans, ...props }: RegisterFormProps) 
                       aria-invalid={!!errors.company_name}
                     />
                     {errors.company_name && (
-                      <p className="text-sm text-destructive">{errors.company_name}</p>
+                      <p className="text-sm text-destructive">
+                        {errors.company_name}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -143,12 +154,16 @@ export function RegisterForm({ className, plans, ...props }: RegisterFormProps) 
                       aria-invalid={!!errors.password}
                     />
                     {errors.password && (
-                      <p className="text-sm text-destructive">{errors.password}</p>
+                      <p className="text-sm text-destructive">
+                        {errors.password}
+                      </p>
                     )}
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="password_confirmation">Confirm Password</Label>
+                    <Label htmlFor="password_confirmation">
+                      Confirm Password
+                    </Label>
                     <Input
                       id="password_confirmation"
                       type="password"
@@ -169,16 +184,19 @@ export function RegisterForm({ className, plans, ...props }: RegisterFormProps) 
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" size="lg" disabled={processing}>
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={processing}
+              >
                 {processing ? (
                   <>
                     <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
                     Creating account...
                   </>
                 ) : (
-                  <>
-                    Create account with {plans[data.plan]?.name} plan
-                  </>
+                  <>Create account with {plans[data.plan]?.name} plan</>
                 )}
               </Button>
 
@@ -194,27 +212,15 @@ export function RegisterForm({ className, plans, ...props }: RegisterFormProps) 
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                <Button
-                  variant="outline"
-                  type="button"
-                  disabled={processing}
-                >
+                <Button variant="outline" type="button" disabled={processing}>
                   <Icons.google className="h-4 w-4" />
                   <span className="sr-only">Sign up with Google</span>
                 </Button>
-                <Button
-                  variant="outline"
-                  type="button"
-                  disabled={processing}
-                >
+                <Button variant="outline" type="button" disabled={processing}>
                   <Icons.gitHub className="h-4 w-4" />
                   <span className="sr-only">Sign up with GitHub</span>
                 </Button>
-                <Button
-                  variant="outline"
-                  type="button"
-                  disabled={processing}
-                >
+                <Button variant="outline" type="button" disabled={processing}>
                   <Icons.apple className="h-4 w-4" />
                   <span className="sr-only">Sign up with Apple</span>
                 </Button>

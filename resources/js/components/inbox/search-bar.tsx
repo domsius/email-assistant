@@ -19,7 +19,8 @@ export function SearchBar() {
 
   useEffect(() => {
     // Skip the effect on initial mount and when only the search query changes
-    const searchQueryChanged = previousSearchQuery.current !== debouncedSearchQuery;
+    const searchQueryChanged =
+      previousSearchQuery.current !== debouncedSearchQuery;
     previousSearchQuery.current = debouncedSearchQuery;
 
     if (isInitialMount.current) {
@@ -29,11 +30,10 @@ export function SearchBar() {
 
     // Only navigate if the search query actually changed
     if (searchQueryChanged && debouncedSearchQuery !== undefined) {
-      
       // Get current URL parameters to preserve page and per_page
       const currentUrl = new URL(window.location.href);
-      const currentPerPage = currentUrl.searchParams.get('per_page');
-      
+      const currentPerPage = currentUrl.searchParams.get("per_page");
+
       // Build query parameters, excluding empty values
       const params: Record<string, any> = {
         folder: activeFolder,
@@ -55,7 +55,6 @@ export function SearchBar() {
       if (debouncedSearchQuery) {
         params.search = debouncedSearchQuery;
       }
-
 
       router.get("/inbox", params, {
         preserveScroll: true,

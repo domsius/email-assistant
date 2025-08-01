@@ -17,7 +17,6 @@ class InboxController extends Controller
     public function index(Request $request): Response
     {
 
-
         // Validate input parameters
         $validated = $request->validate([
             'account' => 'nullable|integer|exists:email_accounts,id',
@@ -54,15 +53,25 @@ class InboxController extends Controller
         }
 
         $selectedAccountId = $validated['account'] ?? null;
+
+        // Auto-select first active account if none specified
+        if ($selectedAccountId === null) {
+            $firstActiveAccount = $this->emailService->getEmailAccounts($user->company_id)
+                ->where('is_active', true)
+                ->first();
+
+            if ($firstActiveAccount) {
+                $selectedAccountId = $firstActiveAccount->id;
+            }
+        }
+
         $folder = $validated['folder'] ?? 'inbox';
         $search = $validated['search'] ?? null;
         $page = $validated['page'] ?? 1;
         $perPage = $validated['per_page'] ?? 5;
 
-
         // Get filter from query params or validated data
         $filter = $request->query('filter') ?? $validated['filter'] ?? 'all';
-
 
         try {
             // Get paginated emails
@@ -84,8 +93,6 @@ class InboxController extends Controller
                 $user->company_id,
                 $selectedAccountId ? (int) $selectedAccountId : null
             );
-
-
 
             return Inertia::render('inbox', [
                 'emails' => $emailsData['data'],

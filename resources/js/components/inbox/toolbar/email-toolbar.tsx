@@ -108,9 +108,13 @@ export const EmailToolbar = React.memo(function EmailToolbar() {
               </Tooltip>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete emails permanently?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    Delete emails permanently?
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action cannot be undone. {selectedEmails.length} email{selectedEmails.length > 1 ? "s" : ""} will be permanently deleted from your account.
+                    This action cannot be undone. {selectedEmails.length} email
+                    {selectedEmails.length > 1 ? "s" : ""} will be permanently
+                    deleted from your account.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -154,7 +158,7 @@ export const EmailToolbar = React.memo(function EmailToolbar() {
               <TooltipContent>Delete</TooltipContent>
             </Tooltip>
 
-{activeFolder !== "junk" && (
+            {activeFolder !== "junk" && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

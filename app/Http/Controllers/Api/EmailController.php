@@ -7,6 +7,7 @@ use App\Http\Requests\Api\AnalyzeEmailRequest;
 use App\Http\Requests\Api\GenerateResponseRequest;
 use App\Models\Customer;
 use App\Models\EmailAttachment;
+use App\Models\EmailDraft;
 use App\Models\EmailMessage;
 use App\Services\AIResponseService;
 use App\Services\AttachmentStorageService;
@@ -89,10 +90,18 @@ class EmailController extends Controller
     }
 
     /**
-     * Display the specified email message.
+     * Display the specified email message or draft.
      */
-    public function show(EmailMessage $email): JsonResponse
+    public function show($id): JsonResponse
     {
+        // Check if this is a draft ID
+        if (is_string($id) && str_starts_with($id, 'draft-')) {
+            return $this->showDraft((int) substr($id, 6));
+        }
+
+        // Handle regular email
+        $email = EmailMessage::findOrFail($id);
+        
         // Ensure user can access this email (same company)
         if ($email->emailAccount->company_id !== auth()->user()->company_id) {
             abort(403);
@@ -111,6 +120,70 @@ class EmailController extends Controller
         $dto = \App\DTOs\EmailDTO::fromModel($email);
 
         return response()->json($dto->toArray());
+    }
+
+    /**
+     * Display the specified draft with original email data.
+     */
+    private function showDraft(int $draftId): JsonResponse
+    {
+        $user = auth()->user();
+        
+        Log::info('showDraft called', [
+            'draft_id' => $draftId,
+            'user_id' => $user->id,
+        ]);
+        
+        $draft = EmailDraft::where('id', $draftId)
+            ->where('user_id', $user->id)
+            ->where('is_deleted', false)
+            ->with(['emailAccount', 'originalEmail'])
+            ->first();
+
+        if (!$draft) {
+            abort(404, 'Draft not found');
+        }
+        
+        Log::info('Draft loaded', [
+            'draft_id' => $draft->id,
+            'has_original_email' => $draft->originalEmail ? true : false,
+            'original_email_id' => $draft->original_email_id,
+            'action' => $draft->action,
+            'original_email_subject' => $draft->originalEmail ? $draft->originalEmail->subject : null,
+        ]);
+
+        // Ensure user can access this draft (check email account company)
+        if ($draft->emailAccount->company_id !== $user->company_id) {
+            abort(403);
+        }
+
+        // Build response with draft data and original email
+        $response = [
+            'id' => 'draft-' . $draft->id,
+            'subject' => $draft->subject,
+            'to' => $draft->to,
+            'cc' => $draft->cc,
+            'bcc' => $draft->bcc,
+            'body_html' => $draft->body,
+            'body_plain' => strip_tags($draft->body),
+            'body_content' => $draft->body,
+            'recipients' => $draft->to ? explode(',', $draft->to) : [],
+            'cc_recipients' => $draft->cc ? explode(',', $draft->cc) : [],
+            'bcc_recipients' => $draft->bcc ? explode(',', $draft->bcc) : [],
+            'action' => $draft->action,
+            'isDraft' => true,
+            'draftId' => $draft->id,
+            'originalEmail' => null,
+        ];
+
+        // Include original email data if this is a reply/forward
+        if ($draft->originalEmail) {
+            $originalEmail = $draft->originalEmail;
+            $originalEmailDto = \App\DTOs\EmailDTO::fromModel($originalEmail);
+            $response['originalEmail'] = $originalEmailDto->toArray();
+        }
+
+        return response()->json($response);
     }
 
     /**

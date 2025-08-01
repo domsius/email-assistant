@@ -29,7 +29,7 @@ export class EmailErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Email preview error:", error, errorInfo);
-    
+
     // Call the optional error handler
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
@@ -94,7 +94,7 @@ export class EmailErrorBoundary extends Component<
 export function withEmailErrorBoundary<P extends object>(
   Component: React.ComponentType<P>,
   fallback?: ReactNode,
-  onError?: (error: Error, errorInfo: ErrorInfo) => void
+  onError?: (error: Error, errorInfo: ErrorInfo) => void,
 ) {
   return (props: P) => (
     <EmailErrorBoundary fallback={fallback} onError={onError}>

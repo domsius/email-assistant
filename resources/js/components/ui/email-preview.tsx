@@ -1,10 +1,5 @@
 import React, { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
@@ -49,6 +44,7 @@ interface EmailPreviewProps {
   onForward?: () => void;
   onDownloadAttachment?: (attachmentId: string) => void;
   onEditDraft?: () => void;
+  onDeleteDraft?: () => void;
 }
 
 function EmailPreviewContent({
@@ -59,6 +55,7 @@ function EmailPreviewContent({
   onForward,
   onDownloadAttachment,
   onEditDraft,
+  onDeleteDraft,
 }: EmailPreviewProps) {
   const [showHeaders, setShowHeaders] = useState(false);
   const [useIframeIsolation, setUseIframeIsolation] = useState(true);
@@ -66,7 +63,6 @@ function EmailPreviewContent({
   // Pass raw content to EmailContentRenderer, let it handle sanitization
   // This ensures styles can be properly extracted before sanitization
   const emailContent = email.content;
-
 
   return (
     <Card className={cn("flex flex-col h-full", className)}>
@@ -120,6 +116,7 @@ function EmailPreviewContent({
             onReplyAll={onReplyAll}
             onForward={onForward}
             onEditDraft={onEditDraft}
+            onDeleteDraft={onDeleteDraft}
             showHeaders={showHeaders}
             onToggleHeaders={() => setShowHeaders(!showHeaders)}
           />

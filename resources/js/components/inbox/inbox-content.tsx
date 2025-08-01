@@ -21,6 +21,9 @@ import { useInbox } from "@/contexts/inbox-context";
 import { router } from "@inertiajs/react";
 import { ComposePanel } from "./compose-panel";
 import type { PaginationLinks, PaginationMeta } from "@/types/inbox";
+import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/utils";
+import { useEffect } from "react";
 
 interface InboxContentProps {
   pagination?: {
@@ -32,7 +35,6 @@ interface InboxContentProps {
 export function InboxContent({ pagination }: InboxContentProps) {
   const {
     selectedEmail,
-    emails,
     isLoading,
     activeFilter,
     setActiveFilter,
@@ -84,31 +86,34 @@ export function InboxContent({ pagination }: InboxContentProps) {
 
   const handleEditDraft = useCallback(async () => {
     if (selectedEmail && selectedEmail.isDraft) {
+      console.log("handleEditDraft called with selectedEmail:", selectedEmail);
+      console.log("selectedEmail.originalEmail:", selectedEmail.originalEmail);
       // Fetch full draft content if needed
       let fullEmail = selectedEmail;
       if (!selectedEmail.content || selectedEmail.content === "") {
         try {
-          const response = await fetch(`/api/emails/${selectedEmail.id}`, {
-            headers: {
-              Accept: "application/json",
-              "X-Requested-With": "XMLHttpRequest",
-              "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-            },
-            credentials: "same-origin",
-          });
+          console.log("Fetching draft content for:", selectedEmail.id);
+          const response = await authenticatedFetch(`/api/emails/${selectedEmail.id}`);
 
           if (response.ok) {
             const emailData = await response.json();
+            console.log("Draft API response:", emailData);
             fullEmail = {
               ...selectedEmail,
-              content: emailData.body_html || emailData.body_plain || emailData.body_content || "",
-              plainTextContent: emailData.body_plain || emailData.body_content || "",
+              content:
+                emailData.body_html ||
+                emailData.body_plain ||
+                emailData.body_content ||
+                "",
+              plainTextContent:
+                emailData.body_plain || emailData.body_content || "",
               recipients: emailData.recipients,
               cc_recipients: emailData.cc_recipients,
               bcc_recipients: emailData.bcc_recipients,
               to: emailData.recipients || emailData.to || "",
               cc: emailData.cc_recipients || emailData.cc || "",
               bcc: emailData.bcc_recipients || emailData.bcc || "",
+              originalEmail: emailData.originalEmail || undefined,
             };
           }
         } catch (error) {
@@ -117,27 +122,75 @@ export function InboxContent({ pagination }: InboxContentProps) {
         }
       }
 
-      // Enter compose mode with draft data and show original draft below
-      enterComposeMode({
+      // Enter compose mode with draft data
+      console.log("Entering compose mode with fullEmail:", fullEmail);
+      console.log("originalEmail:", fullEmail.originalEmail);
+      const composeData = {
         to: fullEmail.to || fullEmail.recipients || "",
         cc: fullEmail.cc || fullEmail.cc_recipients || "",
         bcc: fullEmail.bcc || fullEmail.bcc_recipients || "",
         subject: fullEmail.subject || "",
-        body: "", // Empty body for new content
+        body: fullEmail.content || fullEmail.body_content || fullEmail.plainTextContent || "", // Draft content goes in body
         action: "draft" as const,
-        draftId: typeof fullEmail.id === 'string' && fullEmail.id.startsWith('draft-')
-          ? parseInt(fullEmail.id.replace('draft-', ''))
-          : fullEmail.draftId,
-        originalEmail: {
-          ...fullEmail,
-          sender: fullEmail.sender || "Draft",
-          senderEmail: fullEmail.senderEmail || "",
-          receivedAt: fullEmail.receivedAt || new Date().toISOString(),
-          content: fullEmail.content || fullEmail.plainTextContent || "",
-        },
-      });
+        draftId:
+          typeof fullEmail.id === "string" && fullEmail.id.startsWith("draft-")
+            ? parseInt(fullEmail.id.replace("draft-", ""))
+            : fullEmail.draftId,
+        // Include originalEmail if it exists in the response
+        originalEmail: fullEmail.originalEmail || undefined,
+      };
+      console.log("Entering compose mode with data:", composeData);
+      enterComposeMode(composeData);
     }
   }, [selectedEmail, enterComposeMode]);
+
+  // Auto-open drafts when selected
+  useEffect(() => {
+    if (selectedEmail?.isDraft && !isComposing) {
+      console.log("Auto-opening draft in compose mode");
+      handleEditDraft();
+    }
+  }, [selectedEmail?.id, selectedEmail?.isDraft, isComposing, handleEditDraft]);
+
+  const handleDeleteDraft = useCallback(async () => {
+    if (!selectedEmail || !selectedEmail.isDraft) {
+      return;
+    }
+
+    try {
+      // Get the draft ID - it could be in draftId property or extracted from id
+      let draftId = selectedEmail.draftId;
+      if (!draftId && typeof selectedEmail.id === "string" && selectedEmail.id.startsWith("draft-")) {
+        draftId = parseInt(selectedEmail.id.replace("draft-", ""));
+      } else if (!draftId && typeof selectedEmail.id === "number") {
+        draftId = selectedEmail.id;
+      }
+
+      if (!draftId) {
+        toast.error("Could not determine draft ID");
+        return;
+      }
+
+      const response = await authenticatedFetch(`/drafts/${draftId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        toast.success("Draft deleted successfully");
+        
+        // Refresh the email list to reflect the deletion
+        router.reload({
+          only: ["emails", "pagination"],
+        });
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.message || "Failed to delete draft");
+      }
+    } catch (error) {
+      console.error("Error deleting draft:", error);
+      toast.error("Failed to delete draft");
+    }
+  }, [selectedEmail]);
 
   const handleDownloadAttachment = useCallback(
     (attachmentId: string) => {
@@ -214,11 +267,11 @@ export function InboxContent({ pagination }: InboxContentProps) {
             <EmailToolbar />
             <TabsContent value="all" className="m-0 h-full flex flex-col">
               {isLoading ? <EmailListSkeleton /> : <EmailList />}
-              <PaginationControls pagination={pagination} />
+              {pagination && <PaginationControls pagination={pagination} />}
             </TabsContent>
             <TabsContent value="unread" className="m-0 h-full flex flex-col">
               {isLoading ? <EmailListSkeleton /> : <EmailList />}
-              <PaginationControls pagination={pagination} />
+              {pagination && <PaginationControls pagination={pagination} />}
             </TabsContent>
           </Tabs>
         </ResizablePanel>
@@ -240,12 +293,16 @@ export function InboxContent({ pagination }: InboxContentProps) {
                 ...selectedEmail,
                 plainTextContent: selectedEmail.plainTextContent || undefined,
                 attachments: selectedEmail.attachments || undefined,
+                recipients: selectedEmail.recipients ? [selectedEmail.recipients] : undefined,
+                cc: selectedEmail.cc ? [selectedEmail.cc] : selectedEmail.cc_recipients ? [selectedEmail.cc_recipients] : undefined,
+                bcc: selectedEmail.bcc ? [selectedEmail.bcc] : selectedEmail.bcc_recipients ? [selectedEmail.bcc_recipients] : undefined,
               }}
               onReply={handleReply}
               onReplyAll={handleReplyAll}
               onForward={handleForward}
               onDownloadAttachment={handleDownloadAttachment}
               onEditDraft={handleEditDraft}
+              onDeleteDraft={handleDeleteDraft}
             />
           ) : (
             <div className="flex h-full items-center justify-center p-8 text-center">

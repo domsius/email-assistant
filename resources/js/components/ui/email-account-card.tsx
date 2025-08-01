@@ -181,8 +181,12 @@ export function EmailAccountCard({
             </div>
             <Progress value={syncProgress.percentage} className="h-2" />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{syncProgress.progress} of {syncProgress.total} emails</span>
-              <span className="text-blue-600 dark:text-blue-400">Syncing...</span>
+              <span>
+                {syncProgress.progress} of {syncProgress.total} emails
+              </span>
+              <span className="text-blue-600 dark:text-blue-400">
+                Syncing...
+              </span>
             </div>
           </div>
         ) : (

@@ -9,6 +9,7 @@ import {
   FileText,
   Download,
   Eye,
+  Trash2,
 } from "lucide-react";
 
 interface EmailSecurityBadgesProps {
@@ -141,6 +142,7 @@ interface EmailActionButtonsProps {
   onReplyAll?: () => void;
   onForward?: () => void;
   onEditDraft?: () => void;
+  onDeleteDraft?: () => void;
   showHeaders: boolean;
   onToggleHeaders: () => void;
 }
@@ -151,15 +153,24 @@ export function EmailActionButtons({
   onReplyAll,
   onForward,
   onEditDraft,
+  onDeleteDraft,
   showHeaders,
   onToggleHeaders,
 }: EmailActionButtonsProps) {
   return (
     <div className="flex items-center gap-2">
       {isDraft && onEditDraft ? (
-        <Button variant="default" size="sm" onClick={onEditDraft}>
-          Edit Draft
-        </Button>
+        <>
+          <Button variant="default" size="sm" onClick={onEditDraft}>
+            Edit Draft
+          </Button>
+          {onDeleteDraft && (
+            <Button variant="destructive" size="sm" onClick={onDeleteDraft}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Draft
+            </Button>
+          )}
+        </>
       ) : (
         <>
           {onReply && (

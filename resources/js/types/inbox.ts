@@ -40,6 +40,11 @@ export interface EmailMessage {
   recipients?: string;
   cc_recipients?: string;
   bcc_recipients?: string;
+  // Additional fields returned by API for drafts
+  cc?: string;
+  bcc?: string;
+  body_content?: string;
+  originalEmail?: any; // Could be EmailMessage but allow any for flexibility
 }
 
 export interface EmailAccount {

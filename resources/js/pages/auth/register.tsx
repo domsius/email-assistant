@@ -2,13 +2,16 @@ import { Head } from "@inertiajs/react";
 import { RegisterForm } from "@/components/auth/register-form";
 
 interface RegisterPageProps {
-  plans: Record<string, {
-    name: string;
-    description: string;
-    price: number;
-    email_limit: number;
-    features: string[];
-  }>;
+  plans: Record<
+    string,
+    {
+      name: string;
+      description: string;
+      price: number;
+      email_limit: number;
+      features: string[];
+    }
+  >;
 }
 
 export default function Register({ plans }: RegisterPageProps) {

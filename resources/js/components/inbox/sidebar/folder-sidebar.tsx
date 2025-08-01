@@ -97,22 +97,20 @@ export const FolderSidebar = React.memo(function FolderSidebar() {
                 "w-full justify-start",
                 isCollapsed && "justify-center",
               )}
-              onClick={() => enterComposeMode({
-                to: "",
-                subject: "",
-                body: "",
-                action: "new",
-              })}
+              onClick={() =>
+                enterComposeMode({
+                  to: "",
+                  subject: "",
+                  body: "",
+                  action: "new",
+                })
+              }
             >
               <Plus className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
               {!isCollapsed && <span>Compose</span>}
             </Button>
           </TooltipTrigger>
-          {isCollapsed && (
-            <TooltipContent side="right">
-              Compose
-            </TooltipContent>
-          )}
+          {isCollapsed && <TooltipContent side="right">Compose</TooltipContent>}
         </Tooltip>
       </div>
       <Separator />

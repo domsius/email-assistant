@@ -105,7 +105,10 @@ export function InboxProvider({
   // Update selectedEmail when emails change (e.g., when filter changes)
   React.useEffect(() => {
     setState((prev) => {
-      const newSelectedEmail = emails.find((e) => e.id === prev.selectedEmail?.id) || emails[0] || null;
+      const newSelectedEmail =
+        emails.find((e) => e.id === prev.selectedEmail?.id) ||
+        emails[0] ||
+        null;
       return {
         ...prev,
         selectedEmail: newSelectedEmail,
@@ -118,6 +121,7 @@ export function InboxProvider({
   }, []);
 
   const setSelectedEmail = useCallback(async (email: EmailMessage | null) => {
+    console.log("setSelectedEmail called with:", email);
     // Set the email immediately for UI responsiveness
     setState((prev) => ({ ...prev, selectedEmail: email }));
 
@@ -127,6 +131,7 @@ export function InboxProvider({
 
     // For drafts, we'll handle opening in compose mode via useEffect
     if (email.isDraft) {
+      console.log("Selected email is a draft, returning early");
       return;
     }
 
@@ -137,7 +142,10 @@ export function InboxProvider({
           headers: {
             Accept: "application/json",
             "X-Requested-With": "XMLHttpRequest",
-            "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            "X-CSRF-TOKEN":
+              document
+                .querySelector('meta[name="csrf-token"]')
+                ?.getAttribute("content") || "",
           },
           credentials: "same-origin",
         });
@@ -459,41 +467,47 @@ export function InboxProvider({
     }
   }, [state.selectedEmails, reloadWithCurrentParams]);
 
-  const handleToggleStar = useCallback((emailId: number | string) => {
-    setState((prev) => ({ ...prev, isLoading: true }));
-    router.post(
-      `/emails/${emailId}/toggle-star`,
-      {},
-      {
-        preserveScroll: true,
-        onSuccess: () => {
-          setState((prev) => ({ ...prev, isLoading: false }));
-          reloadWithCurrentParams(["emails"]);
+  const handleToggleStar = useCallback(
+    (emailId: number | string) => {
+      setState((prev) => ({ ...prev, isLoading: true }));
+      router.post(
+        `/emails/${emailId}/toggle-star`,
+        {},
+        {
+          preserveScroll: true,
+          onSuccess: () => {
+            setState((prev) => ({ ...prev, isLoading: false }));
+            reloadWithCurrentParams(["emails"]);
+          },
+          onError: () => {
+            setState((prev) => ({ ...prev, isLoading: false }));
+          },
         },
-        onError: () => {
-          setState((prev) => ({ ...prev, isLoading: false }));
-        },
-      },
-    );
-  }, [reloadWithCurrentParams]);
+      );
+    },
+    [reloadWithCurrentParams],
+  );
 
-  const handleToggleRead = useCallback((emailId: number | string) => {
-    setState((prev) => ({ ...prev, isLoading: true }));
-    router.post(
-      `/emails/${emailId}/toggle-read`,
-      {},
-      {
-        preserveScroll: true,
-        onSuccess: () => {
-          setState((prev) => ({ ...prev, isLoading: false }));
-          reloadWithCurrentParams(["emails"]);
+  const handleToggleRead = useCallback(
+    (emailId: number | string) => {
+      setState((prev) => ({ ...prev, isLoading: true }));
+      router.post(
+        `/emails/${emailId}/toggle-read`,
+        {},
+        {
+          preserveScroll: true,
+          onSuccess: () => {
+            setState((prev) => ({ ...prev, isLoading: false }));
+            reloadWithCurrentParams(["emails"]);
+          },
+          onError: () => {
+            setState((prev) => ({ ...prev, isLoading: false }));
+          },
         },
-        onError: () => {
-          setState((prev) => ({ ...prev, isLoading: false }));
-        },
-      },
-    );
-  }, [reloadWithCurrentParams]);
+      );
+    },
+    [reloadWithCurrentParams],
+  );
 
   const handleSync = useCallback((selectedAccount: number | null) => {
     setState((prev) => ({ ...prev, isLoading: true }));
@@ -535,7 +549,6 @@ export function InboxProvider({
       composeData: null,
     }));
   }, []);
-
 
   const value: InboxContextValue = {
     ...state,

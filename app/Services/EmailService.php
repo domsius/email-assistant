@@ -138,6 +138,12 @@ class EmailService
 
         // Transform drafts to email-like structure
         $draftData = $drafts->map(function ($draft) {
+            Log::info('Processing draft for listing', [
+                'draft_id' => $draft->id,
+                'has_original_email' => $draft->originalEmail ? true : false,
+                'original_email_id' => $draft->original_email_id,
+                'action' => $draft->action,
+            ]);
             return [
                 'id' => 'draft-'.$draft->id, // Prefix to distinguish from emails
                 'subject' => $draft->subject ?: '(No subject)',
@@ -157,6 +163,14 @@ class EmailService
                 'isDraft' => true,
                 'draftId' => $draft->id,
                 'action' => $draft->action,
+                'originalEmail' => $draft->originalEmail ? [
+                    'id' => $draft->originalEmail->id,
+                    'subject' => $draft->originalEmail->subject,
+                    'sender' => $draft->originalEmail->sender_name ?: explode('@', $draft->originalEmail->from_email)[0],
+                    'senderEmail' => $draft->originalEmail->from_email,
+                    'content' => $draft->originalEmail->body_html ?: $draft->originalEmail->body_plain,
+                    'receivedAt' => $draft->originalEmail->received_at->toIso8601String(),
+                ] : null,
             ];
         });
 
@@ -234,6 +248,12 @@ class EmailService
 
         // Transform drafts to email-like structure
         $draftData = $drafts->map(function ($draft) {
+            Log::info('Processing draft for listing', [
+                'draft_id' => $draft->id,
+                'has_original_email' => $draft->originalEmail ? true : false,
+                'original_email_id' => $draft->original_email_id,
+                'action' => $draft->action,
+            ]);
             return [
                 'id' => 'draft-'.$draft->id, // Prefix to distinguish from emails
                 'subject' => $draft->subject ?: '(No subject)',

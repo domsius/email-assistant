@@ -7,8 +7,8 @@ export function initializeTheme() {
 
 export function useAppearance() {
   // Always return light theme
-  return { 
-    appearance: "light" as const, 
-    updateAppearance: () => {} 
+  return {
+    appearance: "light" as const,
+    updateAppearance: () => {},
   } as const;
 }

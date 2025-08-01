@@ -46,14 +46,18 @@ export function PlanCard({
           <span>{plan.name}</span>
           <span className="text-2xl font-bold">
             ${plan.price}
-            <span className="text-sm font-normal text-muted-foreground">/mo</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              /mo
+            </span>
           </span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">{plan.description}</p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="text-center">
-          <p className="text-3xl font-bold">{plan.email_limit.toLocaleString()}</p>
+          <p className="text-3xl font-bold">
+            {plan.email_limit.toLocaleString()}
+          </p>
           <p className="text-sm text-muted-foreground">emails/month</p>
         </div>
         <ul className="space-y-2 text-sm">

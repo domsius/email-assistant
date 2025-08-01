@@ -23,22 +23,29 @@ export function PaginationControls({ pagination }: PaginationControlsProps) {
   }
 
   const handlePageChange = (url: string | null) => {
-    
     if (url) {
       // Parse the URL and preserve existing query parameters
       const parsedUrl = new URL(url, window.location.origin);
       const currentUrl = new URL(window.location.href);
-      
 
       // Remove Inertia-specific parameters that shouldn't be in the URL
-      const inertiaParams = ["preserveState", "preserveScroll", "replace", "only"];
-      inertiaParams.forEach(param => {
+      const inertiaParams = [
+        "preserveState",
+        "preserveScroll",
+        "replace",
+        "only",
+      ];
+      inertiaParams.forEach((param) => {
         parsedUrl.searchParams.delete(param);
       });
 
       // Preserve existing query parameters (except Inertia ones)
       currentUrl.searchParams.forEach((value, key) => {
-        if (key !== "page" && !parsedUrl.searchParams.has(key) && !inertiaParams.includes(key)) {
+        if (
+          key !== "page" &&
+          !parsedUrl.searchParams.has(key) &&
+          !inertiaParams.includes(key)
+        ) {
           // Only add non-empty values
           if (value && value.trim() !== "") {
             parsedUrl.searchParams.set(key, value);
@@ -58,14 +65,18 @@ export function PaginationControls({ pagination }: PaginationControlsProps) {
   };
 
   const handlePerPageChange = (value: string) => {
-    
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set("per_page", value);
     currentUrl.searchParams.set("page", "1"); // Reset to first page
 
     // Remove Inertia-specific parameters
-    const inertiaParams = ["preserveState", "preserveScroll", "replace", "only"];
-    inertiaParams.forEach(param => {
+    const inertiaParams = [
+      "preserveState",
+      "preserveScroll",
+      "replace",
+      "only",
+    ];
+    inertiaParams.forEach((param) => {
       currentUrl.searchParams.delete(param);
     });
 

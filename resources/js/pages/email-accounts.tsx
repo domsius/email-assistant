@@ -102,14 +102,14 @@ export default function EmailAccounts({
 }: EmailAccountsProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [accounts, setAccounts] = useState<EmailAccount[]>(initialAccounts);
-  
+
   // Debug log
   console.log("Email accounts data:", accounts);
 
   // Poll for sync progress updates
   useEffect(() => {
     const syncingAccounts = accounts.filter(
-      (account) => account.syncProgress?.status === "syncing"
+      (account) => account.syncProgress?.status === "syncing",
     );
 
     if (syncingAccounts.length === 0) {
@@ -132,33 +132,40 @@ export default function EmailAccounts({
                 headers: {
                   Accept: "application/json",
                   "X-Requested-With": "XMLHttpRequest",
-                  "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "",
+                  "X-CSRF-TOKEN":
+                    document
+                      .querySelector('meta[name="csrf-token"]')
+                      ?.getAttribute("content") || "",
                 },
                 credentials: "same-origin",
-              }
+              },
             );
 
             if (response.ok) {
               const progressData = await response.json();
-              
+
               // Update account with new progress
               return {
                 ...account,
                 syncProgress: progressData,
-                status: progressData.sync_status === "syncing" ? "syncing" : 
-                        progressData.sync_status === "failed" ? "error" : "active",
+                status:
+                  progressData.sync_status === "syncing"
+                    ? "syncing"
+                    : progressData.sync_status === "failed"
+                      ? "error"
+                      : "active",
               };
             }
 
             return account;
-          })
+          }),
         );
 
         setAccounts(updatedAccounts);
 
         // Check if all syncs are complete
         const stillSyncing = updatedAccounts.some(
-          (account) => account.syncProgress?.status === "syncing"
+          (account) => account.syncProgress?.status === "syncing",
         );
 
         if (!stillSyncing) {
