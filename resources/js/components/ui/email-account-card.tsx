@@ -78,7 +78,6 @@ export function EmailAccountCard({
   onToggleSync,
 }: EmailAccountProps) {
   // Debug log
-  console.log(`EmailAccountCard ${email}:`, { status, syncProgress });
   const getProviderIcon = () => {
     const baseClasses = "h-8 w-8 rounded-full flex items-center justify-center";
     switch (provider) {

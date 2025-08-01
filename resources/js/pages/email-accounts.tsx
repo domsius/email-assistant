@@ -103,9 +103,6 @@ export default function EmailAccounts({
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [accounts, setAccounts] = useState<EmailAccount[]>(initialAccounts);
 
-  // Debug log
-  console.log("Email accounts data:", accounts);
-
   // Poll for sync progress updates
   useEffect(() => {
     const syncingAccounts = accounts.filter(

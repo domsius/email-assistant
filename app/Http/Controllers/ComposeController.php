@@ -310,7 +310,7 @@ class ComposeController extends Controller
         \App\Jobs\SendEmailJob::dispatch($emailAccount, $emailData, $validated['draftId'] ?? null);
 
         return redirect()->route('inbox', ['folder' => 'sent'])
-            ->with('success', 'Email queued for sending');
+            ->with('success', 'Email sent successfully!');
     }
 
     /**

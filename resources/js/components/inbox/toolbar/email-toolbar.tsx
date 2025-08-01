@@ -88,7 +88,7 @@ export const EmailToolbar = React.memo(function EmailToolbar() {
                   <InboxIcon className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Restore to Inbox</TooltipContent>
+              <TooltipContent>Restore</TooltipContent>
             </Tooltip>
 
             <AlertDialog>

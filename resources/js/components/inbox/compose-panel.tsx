@@ -68,7 +68,6 @@ export function ComposePanel({
   originalEmail,
   draftId: initialDraftId,
 }: ComposePanelProps) {
-  console.log("ComposePanel received:", { composeData, originalEmail, initialDraftId });
   const { exitComposeMode, selectedAccount, emailAccounts, setJustSentEmail } = useInbox();
   const [showCc, setShowCc] = useState(!!composeData.cc);
   const [showBcc, setShowBcc] = useState(!!composeData.bcc);
@@ -370,7 +369,7 @@ export function ComposePanel({
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
-          toast.success("Email queued for sending");
+          toast.success("Email sent successfully!");
 
           // Clear form and exit compose mode
           setFormData({
@@ -399,7 +398,7 @@ export function ComposePanel({
                 preserveScroll: true,
                 only: ["emails", "folders", "pagination"],
               });
-            }, 1000);
+            }, 500); // Reduced to 0.5 seconds
           } else {
             // If already in sent folder, refresh after a delay
             setTimeout(() => {
@@ -407,7 +406,7 @@ export function ComposePanel({
                 only: ["emails", "folders", "pagination"],
                 preserveScroll: true,
               });
-            }, 2000); // Give more time for the queue to process
+            }, 1000); // Reduced to 1 second
           }
         },
         onError: (errors) => {

@@ -124,8 +124,6 @@ export function InboxProvider({
   }, []);
 
   const setSelectedEmail = useCallback(async (email: EmailMessage | null) => {
-    console.log("setSelectedEmail called with:", email);
-    // Set the email immediately for UI responsiveness
     setState((prev) => ({ ...prev, selectedEmail: email }));
 
     if (!email) {
@@ -134,7 +132,6 @@ export function InboxProvider({
 
     // For drafts, we'll handle opening in compose mode via useEffect
     if (email.isDraft) {
-      console.log("Selected email is a draft, returning early");
       return;
     }
 

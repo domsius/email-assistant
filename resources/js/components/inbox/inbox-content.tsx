@@ -88,18 +88,14 @@ export function InboxContent({ pagination }: InboxContentProps) {
 
   const handleEditDraft = useCallback(async () => {
     if (selectedEmail && selectedEmail.isDraft) {
-      console.log("handleEditDraft called with selectedEmail:", selectedEmail);
-      console.log("selectedEmail.originalEmail:", selectedEmail.originalEmail);
       // Fetch full draft content if needed
       let fullEmail = selectedEmail;
       if (!selectedEmail.content || selectedEmail.content === "") {
         try {
-          console.log("Fetching draft content for:", selectedEmail.id);
           const response = await authenticatedFetch(`/api/emails/${selectedEmail.id}`);
 
           if (response.ok) {
             const emailData = await response.json();
-            console.log("Draft API response:", emailData);
             fullEmail = {
               ...selectedEmail,
               content:
@@ -125,8 +121,6 @@ export function InboxContent({ pagination }: InboxContentProps) {
       }
 
       // Enter compose mode with draft data
-      console.log("Entering compose mode with fullEmail:", fullEmail);
-      console.log("originalEmail:", fullEmail.originalEmail);
       const composeData = {
         to: fullEmail.to || fullEmail.recipients || "",
         cc: fullEmail.cc || fullEmail.cc_recipients || "",
@@ -141,7 +135,6 @@ export function InboxContent({ pagination }: InboxContentProps) {
         // Include originalEmail if it exists in the response
         originalEmail: fullEmail.originalEmail || undefined,
       };
-      console.log("Entering compose mode with data:", composeData);
       enterComposeMode(composeData);
     }
   }, [selectedEmail, enterComposeMode]);
@@ -152,8 +145,8 @@ export function InboxContent({ pagination }: InboxContentProps) {
   const { stopPolling } = useEmailPolling({
     enabled: justSentEmail && activeFolder === "sent",
     folder: "sent",
-    interval: 3000, // Check every 3 seconds
-    maxAttempts: 10, // Stop after 30 seconds
+    interval: 1000, // Check every 1 second
+    maxAttempts: 20, // Stop after 20 seconds
   });
 
   // Clear the justSentEmail flag when leaving sent folder or after polling completes
@@ -168,7 +161,7 @@ export function InboxContent({ pagination }: InboxContentProps) {
     if (justSentEmail) {
       const timeout = setTimeout(() => {
         setJustSentEmail(false);
-      }, 30000); // Clear after 30 seconds
+      }, 20000); // Clear after 20 seconds
 
       return () => clearTimeout(timeout);
     }

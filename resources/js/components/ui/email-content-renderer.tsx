@@ -125,14 +125,6 @@ export function EmailContentRenderer({
     iframeDoc.write(htmlDocument);
     iframeDoc.close();
 
-    // Debug images if development mode
-    if (process.env.NODE_ENV === "development") {
-      const imgMatches = sanitized.match(/<img[^>]+>/gi);
-      if (imgMatches && imgMatches.length > 0) {
-        console.log(`Email contains ${imgMatches.length} images`);
-      }
-    }
-
     // Adjust iframe height based on content
     const adjustHeight = () => {
       const body = iframeDoc.body;
