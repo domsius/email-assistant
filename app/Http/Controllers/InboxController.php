@@ -20,7 +20,7 @@ class InboxController extends Controller
         // Validate input parameters
         $validated = $request->validate([
             'account' => 'nullable|integer|exists:email_accounts,id',
-            'folder' => 'nullable|string|in:inbox,drafts,sent,junk,trash,archive',
+            'folder' => 'nullable|string|in:inbox,drafts,sent,junk,trash,archive,unread,everything',
             'search' => 'nullable|string|max:255',
             'page' => 'nullable|integer|min:1',
             'per_page' => 'nullable|integer|in:5,10,25,50,100',
@@ -45,6 +45,8 @@ class InboxController extends Controller
                     'junk' => 0,
                     'trash' => 0,
                     'archive' => 0,
+                    'unread' => 0,
+                    'everything' => 0,
                 ],
                 'currentFolder' => 'inbox',
                 'currentFilter' => 'all',
@@ -67,7 +69,7 @@ class InboxController extends Controller
         $folder = $validated['folder'] ?? 'inbox';
         $search = $validated['search'] ?? null;
         $page = $validated['page'] ?? 1;
-        $perPage = $validated['per_page'] ?? 5;
+        $perPage = $validated['per_page'] ?? 100;
 
         // Get filter from query params or validated data
         $filter = $request->query('filter') ?? $validated['filter'] ?? 'all';
@@ -100,6 +102,7 @@ class InboxController extends Controller
                 'folders' => $folders,
                 'currentFolder' => $folder,
                 'currentFilter' => $filter,
+                'searchQuery' => $search,
                 'pagination' => [
                     'links' => $emailsData['links'],
                     'meta' => $emailsData['meta'],
@@ -122,6 +125,8 @@ class InboxController extends Controller
                     'junk' => 0,
                     'trash' => 0,
                     'archive' => 0,
+                    'unread' => 0,
+                    'everything' => 0,
                 ],
                 'currentFolder' => $folder,
                 'currentFilter' => $filter,

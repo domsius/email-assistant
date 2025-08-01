@@ -23,7 +23,7 @@ class EmailRepository
         ?int $accountId = null,
         string $folder = 'inbox',
         ?string $search = null,
-        int $perPage = 5,
+        int $perPage = 100,
         ?string $cursor = null,
         string $filter = 'all'
     ): LengthAwarePaginator {
@@ -122,8 +122,10 @@ class EmailRepository
                 COUNT(CASE WHEN folder = ? AND is_archived = 0 AND is_deleted = 0 THEN 1 END) as drafts,
                 COUNT(CASE WHEN folder = ? AND is_archived = 0 AND is_deleted = 0 THEN 1 END) as sent,
                 COUNT(CASE WHEN folder = ? AND is_archived = 0 AND is_deleted = 0 THEN 1 END) as junk,
-                COUNT(CASE WHEN is_archived = 1 AND is_deleted = 0 THEN 1 END) as archive
-            ', ['INBOX', 'DRAFTS', 'SENT', 'SPAM'])
+                COUNT(CASE WHEN is_archived = 1 AND is_deleted = 0 THEN 1 END) as archive,
+                COUNT(CASE WHEN is_read = 0 AND is_deleted = 0 AND is_archived = 0 THEN 1 END) as unread,
+                COUNT(CASE WHEN is_deleted = 0 AND is_archived = 0 AND (is_read = 1 OR folder != ?) THEN 1 END) as everything
+            ', ['INBOX', 'DRAFTS', 'SENT', 'SPAM', 'INBOX'])
             ->first();
 
         // Get trash count (need to include soft-deleted records)
@@ -152,6 +154,8 @@ class EmailRepository
             junk: $counts->junk ?? 0,
             trash: $trashCount,
             archive: $counts->archive ?? 0,
+            unread: $counts->unread ?? 0,
+            everything: $counts->everything ?? 0,
         );
     }
 
@@ -331,6 +335,21 @@ class EmailRepository
         $query = $this->model->whereIn('email_account_id', $accountIds);
 
         switch ($folder) {
+            case 'unread':
+                // Show all unread emails from all folders except trash
+                $query->where('is_read', false)
+                    ->where('is_deleted', false)
+                    ->where('is_archived', false);
+                break;
+            case 'everything':
+                // Show all emails except inbox, unread, and trash
+                $query->where('is_deleted', false)
+                    ->where('is_archived', false)
+                    ->where(function($q) {
+                        $q->where('is_read', true)
+                          ->orWhere('folder', '!=', 'INBOX');
+                    });
+                break;
             case 'archive':
                 $query->where('is_archived', true)
                     ->where('is_deleted', false);

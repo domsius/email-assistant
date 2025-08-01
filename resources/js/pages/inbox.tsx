@@ -32,6 +32,7 @@ export default function Inbox({
   },
   currentFolder = "inbox",
   currentFilter = "all",
+  searchQuery,
   pagination,
   error,
 }: InboxProps) {
@@ -42,6 +43,7 @@ export default function Inbox({
   const currentFilterValue = props.currentFilter || currentFilter;
   const currentFolders = props.folders || folders;
   const currentPagination = props.pagination || pagination;
+  const currentSearchQuery = props.searchQuery || searchQuery || "";
 
   return (
     <InboxProvider
@@ -51,6 +53,7 @@ export default function Inbox({
       folders={currentFolders}
       currentFolder={currentFolder}
       currentFilter={currentFilterValue}
+      searchQuery={currentSearchQuery}
     >
       <AppLayout breadcrumbs={breadcrumbs}>
         <Head title="Inbox" />

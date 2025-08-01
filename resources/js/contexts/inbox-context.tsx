@@ -4,9 +4,11 @@ import React, {
   useState,
   useCallback,
   ReactNode,
+  useEffect,
 } from "react";
 import { router } from "@inertiajs/react";
 import { toast } from "sonner";
+import { setGlobalComposeFunction } from "@/hooks/use-inbox-navigation";
 import type { EmailMessage, EmailAccount, FolderCounts } from "@/types/inbox";
 
 interface InboxState {
@@ -19,10 +21,12 @@ interface InboxState {
   isLoading: boolean;
   isComposing: boolean;
   composeData: ComposeData | null;
+  isComposeMinimized: boolean;
   justSentEmail: boolean;
+  viewMode: "list" | "detail";
 }
 
-interface ComposeData {
+export interface ComposeData {
   to: string;
   cc?: string;
   bcc?: string;
@@ -58,6 +62,8 @@ interface InboxActions {
   enterComposeMode: (data: ComposeData) => void;
   exitComposeMode: () => void;
   setJustSentEmail: (sent: boolean) => void;
+  setViewMode: (mode: "list" | "detail") => void;
+  setComposeMinimized: (minimized: boolean) => void;
 }
 
 interface InboxContextValue extends InboxState, InboxActions {
@@ -77,6 +83,7 @@ interface InboxProviderProps {
   folders: FolderCounts;
   currentFolder: string;
   currentFilter?: string;
+  searchQuery?: string;
 }
 
 export function InboxProvider({
@@ -87,18 +94,21 @@ export function InboxProvider({
   folders,
   currentFolder,
   currentFilter = "all",
+  searchQuery = "",
 }: InboxProviderProps) {
   const [state, setState] = useState<InboxState>({
     selectedEmails: [],
     selectedEmail: emails[0] || null,
-    searchQuery: "",
+    searchQuery: searchQuery,
     activeFolder: currentFolder,
     activeFilter: currentFilter,
     isCollapsed: false,
     isLoading: false,
     isComposing: false,
     composeData: null,
+    isComposeMinimized: false,
     justSentEmail: false,
+    viewMode: "list",
   });
 
   // Update activeFilter when currentFilter prop changes
@@ -558,6 +568,28 @@ export function InboxProvider({
     }));
   }, []);
 
+  const setViewMode = useCallback((mode: "list" | "detail") => {
+    setState((prev) => ({
+      ...prev,
+      viewMode: mode,
+    }));
+  }, []);
+
+  const setComposeMinimized = useCallback((minimized: boolean) => {
+    setState((prev) => ({
+      ...prev,
+      isComposeMinimized: minimized,
+    }));
+  }, []);
+
+  // Register/unregister the compose function for global access
+  useEffect(() => {
+    setGlobalComposeFunction(enterComposeMode);
+    return () => {
+      setGlobalComposeFunction(null);
+    };
+  }, [enterComposeMode]);
+
   const value: InboxContextValue = {
     ...state,
     emails,
@@ -585,6 +617,8 @@ export function InboxProvider({
     enterComposeMode,
     exitComposeMode,
     setJustSentEmail,
+    setViewMode,
+    setComposeMinimized,
   };
 
   return (

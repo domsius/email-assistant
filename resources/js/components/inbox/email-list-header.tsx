@@ -6,7 +6,7 @@ interface EmailListHeaderProps {
 }
 
 const folderLabels: Record<string, string> = {
-  inbox: "Inbox",
+  inbox: "All Mail",
   drafts: "Drafts",
   sent: "Sent",
   junk: "Junk",
@@ -20,19 +20,21 @@ export function EmailListHeader({ currentTab }: EmailListHeaderProps) {
   return (
     <div className="flex items-center px-4 py-2">
       <h1 className="text-xl font-bold">
-        {folderLabels[activeFolder] || "Inbox"}
+        {folderLabels[activeFolder] || "All Mail"}
       </h1>
-      <TabsList className="ml-auto">
-        <TabsTrigger value="all" className="text-zinc-600 dark:text-zinc-200">
-          All mail
-        </TabsTrigger>
-        <TabsTrigger
-          value="unread"
-          className="text-zinc-600 dark:text-zinc-200"
-        >
-          Unread
-        </TabsTrigger>
-      </TabsList>
+      {activeFolder !== "inbox" && (
+        <TabsList className="ml-auto">
+          <TabsTrigger value="all" className="text-zinc-600 dark:text-zinc-200">
+            All mail
+          </TabsTrigger>
+          <TabsTrigger
+            value="unread"
+            className="text-zinc-600 dark:text-zinc-200"
+          >
+            Unread
+          </TabsTrigger>
+        </TabsList>
+      )}
     </div>
   );
 }

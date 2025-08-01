@@ -59,6 +59,7 @@ interface ComposePanelProps {
     content: string;
   };
   draftId?: number | null;
+  isInDialog?: boolean;
 }
 
 interface Attachment {
@@ -75,6 +76,7 @@ export function ComposePanel({
   composeData,
   originalEmail,
   draftId: initialDraftId,
+  isInDialog = false,
 }: ComposePanelProps) {
   const { exitComposeMode, selectedAccount, emailAccounts, setJustSentEmail } = useInbox();
   const [showCc, setShowCc] = useState(!!composeData.cc);
@@ -677,9 +679,10 @@ export function ComposePanel({
     return null;
   };
 
-  return (
-    <div className="flex flex-col h-full">
-      <Card className="flex-1 flex flex-col">
+  // Content component that can be used with or without the Card wrapper
+  const ComposeContent = () => (
+    <>
+      {!isInDialog && (
         <CardHeader className="border-b px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -691,8 +694,9 @@ export function ComposePanel({
             </Button>
           </div>
         </CardHeader>
+      )}
 
-        <CardContent className="flex-1 flex flex-col p-0">
+      <div className={`flex-1 flex flex-col ${isInDialog ? 'p-0' : ''}`}>
           <div className="space-y-0">
             {/* From Field */}
             <div className="flex items-center border-b px-6 py-3">
@@ -706,7 +710,7 @@ export function ComposePanel({
                 >
                   <SelectValue placeholder="Select an email account" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[10000]">
                   {emailAccounts.map((account) => (
                     <React.Fragment key={account.id}>
                       {/* Main account email */}
@@ -1075,7 +1079,20 @@ export function ComposePanel({
               </div>
             </div>
           </div>
-        </CardContent>
+      </div>
+    </>
+  );
+
+  if (isInDialog) {
+    // When used in dialog, return content without Card wrapper
+    return <ComposeContent />;
+  }
+
+  // When used standalone, return with Card wrapper
+  return (
+    <div className="flex flex-col h-full">
+      <Card className="flex-1 flex flex-col">
+        <ComposeContent />
       </Card>
     </div>
   );

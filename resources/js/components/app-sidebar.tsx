@@ -11,25 +11,24 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { type NavItem } from "@/types";
-import { Link } from "@inertiajs/react";
+import { Link, usePage } from "@inertiajs/react";
 import {
-  BookOpen,
-  Folder,
+  FileText,
+  Inbox,
   LayoutGrid,
   Mail,
-  Inbox,
-  FileText,
 } from "lucide-react";
+import { useInboxNavigation } from "@/hooks/use-inbox-navigation";
 import AppLogo from "./app-logo";
 
-const mainNavItems: NavItem[] = [
+const baseNavItems: NavItem[] = [
   {
     title: "Dashboard",
     href: "/dashboard",
     icon: LayoutGrid,
   },
   {
-    title: "Inbox",
+    title: "All Mail",
     href: "/inbox",
     icon: Inbox,
   },
@@ -48,6 +47,19 @@ const mainNavItems: NavItem[] = [
 const footerNavItems: NavItem[] = [];
 
 export function AppSidebar() {
+  const inboxSubitems = useInboxNavigation();
+  
+  // Create dynamic navigation items
+  const mainNavItems = baseNavItems.map(item => {
+    if (item.title === "All Mail" && inboxSubitems) {
+      return {
+        ...item,
+        subitems: inboxSubitems,
+      };
+    }
+    return item;
+  });
+
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>

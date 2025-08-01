@@ -24,7 +24,7 @@ class EmailService
         ?int $accountId = null,
         string $folder = 'inbox',
         ?string $search = null,
-        int $perPage = 5,
+        int $perPage = 100,
         ?string $cursor = null,
         string $filter = 'all'
     ): array {
@@ -90,7 +90,7 @@ class EmailService
         int $companyId,
         ?int $accountId = null,
         ?string $search = null,
-        int $perPage = 5,
+        int $perPage = 100,
         ?string $cursor = null
     ): array {
         $user = auth()->user();
@@ -194,7 +194,7 @@ class EmailService
         int $companyId,
         ?int $accountId = null,
         ?string $search = null,
-        int $perPage = 5,
+        int $perPage = 100,
         ?string $cursor = null,
         string $filter = 'all'
     ): array {

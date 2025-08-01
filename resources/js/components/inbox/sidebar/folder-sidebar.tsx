@@ -29,7 +29,7 @@ interface NavItem {
 const navItems: Omit<NavItem, "count">[] = [
   {
     id: "inbox",
-    label: "Inbox",
+    label: "All Mail",
     icon: InboxIcon,
   },
   {

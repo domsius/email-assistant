@@ -96,6 +96,7 @@ export interface InboxProps {
   folders: FolderCounts;
   currentFolder?: string;
   currentFilter?: string;
+  searchQuery?: string;
   pagination?: {
     links: PaginationLinks;
     meta: PaginationMeta;
