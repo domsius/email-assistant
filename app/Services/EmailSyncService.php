@@ -45,6 +45,11 @@ class EmailSyncService extends BaseService
                 throw new Exception('Email account not properly authenticated');
             }
 
+            // Sync send-as addresses if it's Gmail
+            if ($emailAccount->provider === 'gmail' && method_exists($provider, 'syncSendAsAddresses')) {
+                $provider->syncSendAsAddresses();
+            }
+
             $totalProcessed = 0;
             $totalSkipped = 0;
             $errors = [];

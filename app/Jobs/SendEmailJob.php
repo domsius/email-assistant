@@ -79,6 +79,7 @@ class SendEmailJob implements ShouldQueue
                 'bcc' => ! empty($this->emailData['bcc']) ? implode(', ', $this->emailData['bcc']) : null,
                 'subject' => $this->emailData['subject'],
                 'body' => $this->emailData['body'],
+                'fromAlias' => $this->emailData['fromAlias'] ?? null,
                 'in_reply_to' => $this->emailData['inReplyTo'] ?? null,
                 'references' => $this->emailData['references'] ?? null,
             ];
@@ -128,9 +129,21 @@ class SendEmailJob implements ShouldQueue
         $emailMessage->subject = $this->emailData['subject'];
         $emailMessage->body_plain = strip_tags($this->emailData['body']);
         $emailMessage->body_html = $this->emailData['body'];
-        $emailMessage->from_email = $this->emailAccount->email_address;
-        $emailMessage->sender_email = $this->emailAccount->email_address;
-        $emailMessage->sender_name = $this->emailAccount->display_name;
+        
+        // Use alias if provided, otherwise use main account
+        if (!empty($this->emailData['fromAlias'])) {
+            $emailMessage->from_email = $this->emailData['fromAlias'];
+            $emailMessage->sender_email = $this->emailData['fromAlias'];
+            // Try to get alias name
+            $alias = $this->emailAccount->aliases()
+                ->where('email_address', $this->emailData['fromAlias'])
+                ->first();
+            $emailMessage->sender_name = $alias ? ($alias->name ?: $alias->email_address) : $this->emailData['fromAlias'];
+        } else {
+            $emailMessage->from_email = $this->emailAccount->email_address;
+            $emailMessage->sender_email = $this->emailAccount->email_address;
+            $emailMessage->sender_name = $this->emailAccount->display_name;
+        }
         $emailMessage->received_at = now();
         $emailMessage->is_read = true;
         $emailMessage->processing_status = 'completed';

@@ -8,6 +8,7 @@ use Google\Client as GoogleClient;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
 use Illuminate\Support\Facades\Log;
+use App\Models\EmailAccountAlias;
 
 class GmailService implements EmailProviderInterface
 {
@@ -34,6 +35,7 @@ class GmailService implements EmailProviderInterface
             Gmail::GMAIL_READONLY,
             Gmail::GMAIL_SEND,
             Gmail::GMAIL_COMPOSE,
+            Gmail::GMAIL_SETTINGS_BASIC,
         ]);
         $this->client->setAccessType('offline');
         $this->client->setPrompt('consent');
@@ -520,8 +522,26 @@ class GmailService implements EmailProviderInterface
         $to = $emailData['to'];
         $subject = $emailData['subject'];
         $body = $emailData['body'];
-        $fromEmail = $this->emailAccount->email_address;
-        $fromName = $this->emailAccount->email_address; // Could be improved with user name
+        
+        // Use alias if provided, otherwise use the main account email
+        if (!empty($emailData['fromAlias'])) {
+            // Look up the alias to get the display name
+            $alias = $this->emailAccount->aliases()
+                ->where('email_address', $emailData['fromAlias'])
+                ->first();
+            
+            if ($alias) {
+                $fromEmail = $alias->email_address;
+                $fromName = $alias->name ?: $alias->email_address;
+            } else {
+                // Fallback to main account if alias not found
+                $fromEmail = $this->emailAccount->email_address;
+                $fromName = $this->emailAccount->email_address;
+            }
+        } else {
+            $fromEmail = $this->emailAccount->email_address;
+            $fromName = $this->emailAccount->email_address;
+        }
 
         $headers = [];
         $headers[] = "From: {$fromName} <{$fromEmail}>";
@@ -637,6 +657,63 @@ class GmailService implements EmailProviderInterface
     public function getNextPageToken(): ?string
     {
         return $this->nextPageToken;
+    }
+
+    /**
+     * Sync send-as addresses (aliases) from Gmail
+     */
+    public function syncSendAsAddresses(): void
+    {
+        try {
+            // Fetch send-as addresses from Gmail
+            $sendAsAddresses = $this->gmail->users_settings_sendAs->listUsersSettingsSendAs('me');
+            
+            // Get existing aliases for this account
+            $existingAliases = $this->emailAccount->aliases()->pluck('email_address')->toArray();
+            
+            foreach ($sendAsAddresses->getSendAs() as $sendAs) {
+                $emailAddress = $sendAs->getSendAsEmail();
+                $displayName = $sendAs->getDisplayName();
+                $replyToAddress = $sendAs->getReplyToAddress();
+                $isDefault = $sendAs->getIsDefault() ?? false;
+                $verificationStatus = $sendAs->getVerificationStatus();
+                
+                // Skip if not verified (unless it's the primary address)
+                if ($verificationStatus !== 'accepted' && !$isDefault) {
+                    continue;
+                }
+                
+                // Create or update the alias
+                $this->emailAccount->aliases()->updateOrCreate(
+                    ['email_address' => $emailAddress],
+                    [
+                        'name' => $displayName,
+                        'is_default' => $isDefault,
+                        'is_verified' => $verificationStatus === 'accepted',
+                        'reply_to_address' => $replyToAddress,
+                        'settings' => [
+                            'signature' => $sendAs->getSignature(),
+                            'treat_as_alias' => $sendAs->getTreatAsAlias(),
+                        ],
+                    ]
+                );
+                
+                // Remove from existing aliases array
+                $existingAliases = array_diff($existingAliases, [$emailAddress]);
+            }
+            
+            // Delete aliases that no longer exist in Gmail
+            if (!empty($existingAliases)) {
+                $this->emailAccount->aliases()
+                    ->whereIn('email_address', $existingAliases)
+                    ->delete();
+            }
+            
+            Log::info("Synced send-as addresses for account: {$this->emailAccount->email_address}");
+            
+        } catch (Exception $e) {
+            Log::error("Failed to sync send-as addresses: " . $e->getMessage());
+        }
     }
 
     /**

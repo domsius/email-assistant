@@ -47,11 +47,21 @@ export interface EmailMessage {
   originalEmail?: any; // Could be EmailMessage but allow any for flexibility
 }
 
+export interface EmailAccountAlias {
+  id: number;
+  email_address: string;
+  name?: string;
+  is_default: boolean;
+  is_verified: boolean;
+  reply_to_address?: string;
+}
+
 export interface EmailAccount {
   id: number;
   email: string;
   provider: string;
   isActive: boolean;
+  aliases?: EmailAccountAlias[];
 }
 
 export interface FolderCounts {

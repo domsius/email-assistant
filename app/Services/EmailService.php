@@ -326,6 +326,7 @@ class EmailService
     public function getEmailAccounts(int $companyId): Collection
     {
         return EmailAccount::where('company_id', $companyId)
+            ->with('aliases')
             ->select('id', 'email_address as email', 'provider', 'is_active')
             ->get();
     }

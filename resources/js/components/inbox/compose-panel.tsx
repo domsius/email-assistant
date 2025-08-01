@@ -131,7 +131,11 @@ export function ComposePanel({
     if (isSavingDraft) return;
 
     // Get the account to use for saving
-    let accountToUse = fromAccount ? parseInt(fromAccount) : null;
+    let accountToUse: number | null = null;
+    if (fromAccount) {
+      // Extract just the account ID if it includes an alias
+      accountToUse = parseInt(fromAccount.split(':')[0]);
+    }
 
     // If no account is selected, try to use the first available account
     if (!accountToUse && emailAccounts.length > 0) {
@@ -361,10 +365,23 @@ export function ComposePanel({
 
     setIsSending(true);
 
+    // Parse the fromAccount to extract account ID and alias email
+    let emailAccountId: number;
+    let fromAlias: string | undefined;
+    
+    if (fromAccount.includes(':')) {
+      const [accountId, aliasEmail] = fromAccount.split(':');
+      emailAccountId = parseInt(accountId);
+      fromAlias = aliasEmail;
+    } else {
+      emailAccountId = parseInt(fromAccount);
+    }
+
     router.post(
       "/emails/send",
       {
-        emailAccountId: parseInt(fromAccount),
+        emailAccountId,
+        fromAlias,
         to: formData.to,
         cc: formData.cc || "",
         bcc: formData.bcc || "",
@@ -668,16 +685,38 @@ export function ComposePanel({
                 </SelectTrigger>
                 <SelectContent>
                   {emailAccounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id.toString()}>
-                      <div className="flex items-center gap-2">
-                        <span>{account.email}</span>
-                        {account.provider && (
-                          <span className="text-xs text-muted-foreground">
-                            ({account.provider})
-                          </span>
-                        )}
-                      </div>
-                    </SelectItem>
+                    <React.Fragment key={account.id}>
+                      {/* Main account email */}
+                      <SelectItem value={`${account.id}`}>
+                        <div className="flex items-center gap-2">
+                          <span>{account.email}</span>
+                          {account.provider && (
+                            <span className="text-xs text-muted-foreground">
+                              ({account.provider})
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                      
+                      {/* Account aliases */}
+                      {account.aliases && account.aliases.length > 0 && 
+                        account.aliases.map((alias: any) => (
+                          <SelectItem 
+                            key={`${account.id}:${alias.email_address}`} 
+                            value={`${account.id}:${alias.email_address}`}
+                          >
+                            <div className="flex items-center gap-2 pl-4">
+                              <span>{alias.email_address}</span>
+                              {alias.name && (
+                                <span className="text-xs text-muted-foreground">
+                                  ({alias.name})
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))
+                      }
+                    </React.Fragment>
                   ))}
                 </SelectContent>
               </Select>

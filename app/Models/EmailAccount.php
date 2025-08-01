@@ -54,6 +54,11 @@ class EmailAccount extends Model
         return $this->hasMany(EmailMessage::class);
     }
 
+    public function aliases(): HasMany
+    {
+        return $this->hasMany(EmailAccountAlias::class);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
