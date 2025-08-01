@@ -143,7 +143,7 @@ class ComposeController extends Controller
             'bcc' => 'nullable|string|max:500',
             'subject' => 'nullable|string|max:255',
             'body' => 'nullable|string',
-            'action' => 'nullable|string|in:new,reply,replyAll,forward',
+            'action' => 'nullable|string|in:new,reply,replyAll,forward,draft',
             'inReplyTo' => 'nullable|string',
             'references' => 'nullable|string',
             'originalEmailId' => 'nullable|integer|exists:email_messages,id',
