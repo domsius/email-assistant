@@ -6,6 +6,7 @@ use App\Models\EmailAccount;
 use App\Models\EmailDraft;
 use App\Models\EmailMessage;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -257,7 +258,7 @@ class ComposeController extends Controller
     /**
      * Send an email
      */
-    public function send(Request $request): JsonResponse
+    public function send(Request $request): RedirectResponse
     {
         $validated = $request->validate([
             'to' => 'required|string|max:500',
@@ -281,7 +282,7 @@ class ComposeController extends Controller
             ->first();
 
         if (! $emailAccount) {
-            return response()->json(['error' => 'Email account not found or inactive'], 404);
+            return back()->withErrors(['emailAccountId' => 'Email account not found or inactive']);
         }
 
         // Validate email addresses
@@ -290,7 +291,7 @@ class ComposeController extends Controller
         $bccEmails = $validated['bcc'] ? $this->parseEmailAddresses($validated['bcc']) : [];
 
         if (empty($toEmails)) {
-            return response()->json(['error' => 'At least one valid recipient email address is required'], 422);
+            return back()->withErrors(['to' => 'At least one valid recipient email address is required']);
         }
 
         // Prepare email data for the job
@@ -308,10 +309,8 @@ class ComposeController extends Controller
         // Dispatch the send email job
         \App\Jobs\SendEmailJob::dispatch($emailAccount, $emailData, $validated['draftId'] ?? null);
 
-        return response()->json([
-            'message' => 'Email queued for sending',
-            'status' => 'queued',
-        ]);
+        return redirect()->route('inbox', ['folder' => 'sent'])
+            ->with('success', 'Email queued for sending');
     }
 
     /**
