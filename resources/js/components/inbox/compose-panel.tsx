@@ -416,13 +416,8 @@ export function ComposePanel({
   };
 
   const handleCancel = () => {
-    if (
-      formData.body ||
-      formData.to ||
-      formData.subject !== composeData.subject
-    ) {
-      exitComposeMode();
-    }
+    // Always exit compose mode when cancel is clicked
+    exitComposeMode();
   };
 
   const handleGenerateAI = async () => {
