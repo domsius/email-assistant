@@ -76,6 +76,15 @@ export function ComposePanel({
   draftId: initialDraftId,
 }: ComposePanelProps) {
   const { exitComposeMode, selectedAccount, emailAccounts, setJustSentEmail } = useInbox();
+  
+  // Debug logging
+  console.log("Email accounts:", emailAccounts);
+  emailAccounts.forEach(account => {
+    console.log(`Account ${account.email}:`, account);
+    if (account.aliases) {
+      console.log(`  Aliases:`, account.aliases);
+    }
+  });
   const [showCc, setShowCc] = useState(!!composeData.cc);
   const [showBcc, setShowBcc] = useState(!!composeData.bcc);
   const [isSending, setIsSending] = useState(false);

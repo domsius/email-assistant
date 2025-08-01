@@ -325,10 +325,20 @@ class EmailService
      */
     public function getEmailAccounts(int $companyId): Collection
     {
-        return EmailAccount::where('company_id', $companyId)
+        $accounts = EmailAccount::where('company_id', $companyId)
             ->with('aliases')
-            ->select('id', 'email_address as email', 'provider', 'is_active')
             ->get();
+            
+        // Transform the data to match the expected format
+        return $accounts->map(function ($account) {
+            return [
+                'id' => $account->id,
+                'email' => $account->email_address,
+                'provider' => $account->provider,
+                'is_active' => $account->is_active,
+                'aliases' => $account->aliases->toArray(),
+            ];
+        });
     }
 
     /**
