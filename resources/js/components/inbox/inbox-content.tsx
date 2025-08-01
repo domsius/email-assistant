@@ -86,12 +86,25 @@ export function InboxContent({ pagination }: InboxContentProps) {
 
   if (viewMode === "detail" && selectedEmailForDetail) {
     return (
-      <div className="flex h-full flex-col">
-        <EmailDetailView
-          email={selectedEmailForDetail}
-          onBackToList={handleBackToList}
-        />
-      </div>
+      <TooltipProvider delayDuration={0}>
+        <div className="flex h-full flex-col">
+          <EmailDetailView
+            email={selectedEmailForDetail}
+            onBackToList={handleBackToList}
+          />
+          {isComposing && (
+            <ComposeDialog 
+              composeData={composeData || {
+                to: "",
+                subject: "",
+                body: "",
+                action: "new"
+              }} 
+              originalEmail={composeData?.originalEmail}
+            />
+          )}
+        </div>
+      </TooltipProvider>
     );
   }
 
