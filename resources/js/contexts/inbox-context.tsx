@@ -247,236 +247,257 @@ export function InboxProvider({
   }, []);
 
   const handleArchive = useCallback(() => {
-    if (state.selectedEmails.length > 0) {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      router.post(
-        "/emails/archive",
-        {
-          emailIds: state.selectedEmails,
-        },
-        {
-          preserveScroll: true,
-          onSuccess: () => {
-            setState((prev) => ({
-              ...prev,
-              selectedEmails: [],
-              isLoading: false,
-            }));
-            reloadWithCurrentParams(["emails", "folders"]);
+    setState((prev) => {
+      if (prev.selectedEmails.length > 0) {
+        router.post(
+          "/emails/archive",
+          {
+            emailIds: prev.selectedEmails,
           },
-          onError: () => {
-            setState((prev) => ({ ...prev, isLoading: false }));
+          {
+            preserveScroll: true,
+            onSuccess: () => {
+              setState((current) => ({
+                ...current,
+                selectedEmails: [],
+                isLoading: false,
+              }));
+              reloadWithCurrentParams(["emails", "folders"]);
+            },
+            onError: () => {
+              setState((current) => ({ ...current, isLoading: false }));
+            },
           },
-        },
-      );
-    }
-  }, [state.selectedEmails, reloadWithCurrentParams]);
+        );
+        return { ...prev, isLoading: true };
+      }
+      return prev;
+    });
+  }, [reloadWithCurrentParams]);
 
   const handleUnarchive = useCallback(() => {
-    if (state.selectedEmails.length > 0) {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      router.post(
-        "/emails/unarchive",
-        {
-          emailIds: state.selectedEmails,
-        },
-        {
-          preserveScroll: true,
-          onSuccess: () => {
-            setState((prev) => ({
-              ...prev,
-              selectedEmails: [],
-              isLoading: false,
-            }));
-            reloadWithCurrentParams(["emails", "folders"]);
+    setState((prev) => {
+      if (prev.selectedEmails.length > 0) {
+        router.post(
+          "/emails/unarchive",
+          {
+            emailIds: prev.selectedEmails,
           },
-          onError: () => {
-            setState((prev) => ({ ...prev, isLoading: false }));
+          {
+            preserveScroll: true,
+            onSuccess: () => {
+              setState((current) => ({
+                ...current,
+                selectedEmails: [],
+                isLoading: false,
+              }));
+              reloadWithCurrentParams(["emails", "folders"]);
+            },
+            onError: () => {
+              setState((current) => ({ ...current, isLoading: false }));
+            },
           },
-        },
-      );
-    }
-  }, [state.selectedEmails, reloadWithCurrentParams]);
+        );
+        return { ...prev, isLoading: true };
+      }
+      return prev;
+    });
+  }, [reloadWithCurrentParams]);
 
   const handleRestore = useCallback(() => {
-    if (state.selectedEmails.length > 0) {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      router.post(
-        "/emails/restore",
-        {
-          emailIds: state.selectedEmails,
-        },
-        {
-          preserveScroll: true,
-          onSuccess: () => {
-            setState((prev) => ({
-              ...prev,
-              selectedEmails: [],
-              isLoading: false,
-            }));
-            reloadWithCurrentParams(["emails", "folders"]);
+    setState((prev) => {
+      if (prev.selectedEmails.length > 0) {
+        router.post(
+          "/emails/restore",
+          {
+            emailIds: prev.selectedEmails,
           },
-          onError: () => {
-            setState((prev) => ({ ...prev, isLoading: false }));
+          {
+            preserveScroll: true,
+            onSuccess: () => {
+              setState((current) => ({
+                ...current,
+                selectedEmails: [],
+                isLoading: false,
+              }));
+              reloadWithCurrentParams(["emails", "folders"]);
+            },
+            onError: () => {
+              setState((current) => ({ ...current, isLoading: false }));
+            },
           },
-        },
-      );
-    }
-  }, [state.selectedEmails, reloadWithCurrentParams]);
+        );
+        return { ...prev, isLoading: true };
+      }
+      return prev;
+    });
+  }, [reloadWithCurrentParams]);
 
   const handleDelete = useCallback(() => {
-    if (state.selectedEmails.length > 0) {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      const emailCount = state.selectedEmails.length;
-      router.post(
-        "/emails/delete",
-        {
-          emailIds: state.selectedEmails,
-        },
-        {
-          preserveScroll: true,
-          onSuccess: () => {
-            setState((prev) => ({
-              ...prev,
-              selectedEmails: [],
-              isLoading: false,
-            }));
-            toast.success(
-              `${emailCount} email${emailCount > 1 ? "s" : ""} moved to trash`,
-              {
-                action: {
-                  label: "View Trash",
-                  onClick: () => {
-                    router.get("/inbox?folder=trash");
+    setState((prev) => {
+      if (prev.selectedEmails.length > 0) {
+        const emailCount = prev.selectedEmails.length;
+        router.post(
+          "/emails/delete",
+          {
+            emailIds: prev.selectedEmails,
+          },
+          {
+            preserveScroll: true,
+            onSuccess: () => {
+              setState((current) => ({
+                ...current,
+                selectedEmails: [],
+                isLoading: false,
+              }));
+              toast.success(
+                `${emailCount} email${emailCount > 1 ? "s" : ""} moved to trash`,
+                {
+                  action: {
+                    label: "View Trash",
+                    onClick: () => {
+                      router.get("/inbox?folder=trash");
+                    },
                   },
+                  duration: 5000,
                 },
-                duration: 5000,
-              },
-            );
-            reloadWithCurrentParams(["emails", "folders"]);
+              );
+              reloadWithCurrentParams(["emails", "folders"]);
+            },
+            onError: () => {
+              setState((current) => ({ ...current, isLoading: false }));
+              toast.error("Failed to delete emails");
+            },
           },
-          onError: () => {
-            setState((prev) => ({ ...prev, isLoading: false }));
-            toast.error("Failed to delete emails");
-          },
-        },
-      );
-    }
-  }, [state.selectedEmails, reloadWithCurrentParams]);
+        );
+        return { ...prev, isLoading: true };
+      }
+      return prev;
+    });
+  }, [reloadWithCurrentParams]);
 
   const handleMoveToSpam = useCallback(() => {
-    if (state.selectedEmails.length > 0) {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      const emailCount = state.selectedEmails.length;
-      router.post(
-        "/emails/spam",
-        {
-          emailIds: state.selectedEmails,
-        },
-        {
-          preserveScroll: true,
-          onSuccess: () => {
-            setState((prev) => ({
-              ...prev,
-              selectedEmails: [],
-              isLoading: false,
-            }));
-            toast.success(
-              `${emailCount} email${emailCount > 1 ? "s" : ""} moved to spam`,
-              {
-                action: {
-                  label: "View Spam",
-                  onClick: () => {
-                    router.get("/inbox?folder=junk");
+    setState((prev) => {
+      if (prev.selectedEmails.length > 0) {
+        const emailCount = prev.selectedEmails.length;
+        router.post(
+          "/emails/spam",
+          {
+            emailIds: prev.selectedEmails,
+          },
+          {
+            preserveScroll: true,
+            onSuccess: () => {
+              setState((current) => ({
+                ...current,
+                selectedEmails: [],
+                isLoading: false,
+              }));
+              toast.success(
+                `${emailCount} email${emailCount > 1 ? "s" : ""} moved to spam`,
+                {
+                  action: {
+                    label: "View Spam",
+                    onClick: () => {
+                      router.get("/inbox?folder=junk");
+                    },
                   },
+                  duration: 5000,
                 },
-                duration: 5000,
-              },
-            );
-            reloadWithCurrentParams(["emails", "folders"]);
+              );
+              reloadWithCurrentParams(["emails", "folders"]);
+            },
+            onError: () => {
+              setState((current) => ({ ...current, isLoading: false }));
+              toast.error("Failed to move emails to spam");
+            },
           },
-          onError: () => {
-            setState((prev) => ({ ...prev, isLoading: false }));
-            toast.error("Failed to move emails to spam");
-          },
-        },
-      );
-    }
-  }, [state.selectedEmails, reloadWithCurrentParams]);
+        );
+        return { ...prev, isLoading: true };
+      }
+      return prev;
+    });
+  }, [reloadWithCurrentParams]);
 
   const handleNotSpam = useCallback(() => {
-    if (state.selectedEmails.length > 0) {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      const emailCount = state.selectedEmails.length;
-      router.post(
-        "/emails/not-spam",
-        {
-          emailIds: state.selectedEmails,
-        },
-        {
-          preserveScroll: true,
-          onSuccess: () => {
-            setState((prev) => ({
-              ...prev,
-              selectedEmails: [],
-              isLoading: false,
-            }));
-            toast.success(
-              `${emailCount} email${emailCount > 1 ? "s" : ""} moved to inbox`,
-              {
-                action: {
-                  label: "View Inbox",
-                  onClick: () => {
-                    router.get("/inbox");
+    setState((prev) => {
+      if (prev.selectedEmails.length > 0) {
+        const emailCount = prev.selectedEmails.length;
+        router.post(
+          "/emails/not-spam",
+          {
+            emailIds: prev.selectedEmails,
+          },
+          {
+            preserveScroll: true,
+            onSuccess: () => {
+              setState((current) => ({
+                ...current,
+                selectedEmails: [],
+                isLoading: false,
+              }));
+              toast.success(
+                `${emailCount} email${emailCount > 1 ? "s" : ""} moved to inbox`,
+                {
+                  action: {
+                    label: "View Inbox",
+                    onClick: () => {
+                      router.get("/inbox");
+                    },
                   },
+                  duration: 5000,
                 },
-                duration: 5000,
-              },
-            );
-            reloadWithCurrentParams(["emails", "folders"]);
+              );
+              reloadWithCurrentParams(["emails", "folders"]);
+            },
+            onError: () => {
+              setState((current) => ({ ...current, isLoading: false }));
+              toast.error("Failed to move emails from spam");
+            },
           },
-          onError: () => {
-            setState((prev) => ({ ...prev, isLoading: false }));
-            toast.error("Failed to move emails from spam");
-          },
-        },
-      );
-    }
-  }, [state.selectedEmails, reloadWithCurrentParams]);
+        );
+        return { ...prev, isLoading: true };
+      }
+      return prev;
+    });
+  }, [reloadWithCurrentParams]);
 
   const handlePermanentDelete = useCallback(() => {
-    if (state.selectedEmails.length > 0) {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      const emailCount = state.selectedEmails.length;
-      router.post(
-        "/emails/permanent-delete",
-        {
-          emailIds: state.selectedEmails,
-        },
-        {
-          preserveScroll: true,
-          onSuccess: () => {
-            setState((prev) => ({
-              ...prev,
-              selectedEmails: [],
-              isLoading: false,
-            }));
-            toast.success(
-              `${emailCount} email${emailCount > 1 ? "s" : ""} permanently deleted`,
-              {
-                duration: 5000,
-              },
-            );
-            reloadWithCurrentParams(["emails", "folders"]);
+    setState((prev) => {
+      if (prev.selectedEmails.length > 0) {
+        const emailCount = prev.selectedEmails.length;
+        router.post(
+          "/emails/permanent-delete",
+          {
+            emailIds: prev.selectedEmails,
           },
-          onError: () => {
-            setState((prev) => ({ ...prev, isLoading: false }));
-            toast.error("Failed to permanently delete emails");
+          {
+            preserveScroll: true,
+            onSuccess: () => {
+              setState((current) => ({
+                ...current,
+                selectedEmails: [],
+                isLoading: false,
+              }));
+              toast.success(
+                `${emailCount} email${emailCount > 1 ? "s" : ""} permanently deleted`,
+                {
+                  duration: 5000,
+                },
+              );
+              reloadWithCurrentParams(["emails", "folders"]);
+            },
+            onError: () => {
+              setState((current) => ({ ...current, isLoading: false }));
+              toast.error("Failed to permanently delete emails");
+            },
           },
-        },
-      );
-    }
-  }, [state.selectedEmails, reloadWithCurrentParams]);
+        );
+        return { ...prev, isLoading: true };
+      }
+      return prev;
+    });
+  }, [reloadWithCurrentParams]);
 
   const handleToggleStar = useCallback(
     (emailId: number | string) => {

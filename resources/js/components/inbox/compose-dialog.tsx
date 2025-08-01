@@ -1,10 +1,12 @@
 import React, { useState, useCallback } from "react";
-import { X, Minus, Square, Move } from "lucide-react";
+import { X, Minus, Square, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ComposePanel } from "./compose-panel";
 import { useInbox } from "@/contexts/inbox-context";
 import type { ComposeData } from "@/contexts/inbox-context";
+import { cn } from "@/lib/utils";
 
 interface ComposeDialogProps {
   composeData: ComposeData;
@@ -14,45 +16,7 @@ interface ComposeDialogProps {
 
 export function ComposeDialog({ composeData, originalEmail, draftId }: ComposeDialogProps) {
   const { exitComposeMode, isComposeMinimized, setComposeMinimized } = useInbox();
-  const [position, setPosition] = useState({ x: window.innerWidth - 520, y: window.innerHeight - 620 });
-  const [size, setSize] = useState({ width: 500, height: 600 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.target !== e.currentTarget) return; // Only drag from header
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    });
-  }, [position]);
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging) return;
-    
-    const newX = Math.max(0, Math.min(window.innerWidth - size.width, e.clientX - dragStart.x));
-    const newY = Math.max(0, Math.min(window.innerHeight - (isComposeMinimized ? 60 : size.height), e.clientY - dragStart.y));
-    
-    setPosition({ x: newX, y: newY });
-  }, [isDragging, dragStart, size, isComposeMinimized]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
-
-  // Add mouse event listeners
-  React.useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+  const [size] = useState({ width: 540, height: 640 });
 
   const handleMinimize = useCallback(() => {
     setComposeMinimized(!isComposeMinimized);
@@ -75,63 +39,151 @@ export function ComposeDialog({ composeData, originalEmail, draftId }: ComposeDi
     }
   };
 
+  const getActionColor = () => {
+    switch (composeData.action) {
+      case "reply":
+        return "bg-primary/10 text-primary hover:bg-primary/20";
+      case "replyAll":
+        return "bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-400";
+      case "forward":
+        return "bg-orange-500/10 text-orange-700 hover:bg-orange-500/20 dark:text-orange-400";
+      default:
+        return "bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-400";
+    }
+  };
+
+  if (isComposeMinimized) {
+    return (
+      <div 
+        className="fixed z-[9999] transition-all duration-300 ease-in-out"
+        style={{ 
+          right: 20, 
+          bottom: 0
+        }}
+      >
+        <Card className="border border-border shadow-lg hover:shadow-xl transition-shadow duration-200 rounded-lg">
+          <div
+            className="flex items-center justify-between px-4 py-3 select-none min-w-[320px] rounded-lg"
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              </div>
+              
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Badge variant="secondary" className={cn("text-xs font-medium flex-shrink-0", getActionColor())}>
+                  {getActionLabel()}
+                </Badge>
+                <span className="text-sm font-medium text-foreground truncate">
+                  {composeData.subject || "No Subject"}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-1 flex-shrink-0" data-no-drag="true">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 hover:bg-muted transition-colors"
+                onClick={handleMinimize}
+                title="Maximize"
+              >
+                <Square className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 hover:bg-destructive/20 hover:text-destructive transition-colors"
+                onClick={handleClose}
+                title="Close"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed z-[9999]" style={{ left: position.x, top: position.y }}>
+    <div 
+      className={cn(
+        "fixed z-[9999] transition-all duration-300 ease-in-out",
+        "animate-in slide-in-from-bottom-5 pointer-events-auto"
+      )}
+      style={{ 
+        right: 45,
+        bottom: 45
+      }}
+    >
       <Card 
-        className={`bg-white border shadow-2xl transition-all duration-200 ${
-          isComposeMinimized ? 'h-14' : ''
-        }`}
+        className="bg-card border border-border shadow-2xl flex flex-col rounded-lg overflow-hidden py-0"
         style={{ 
           width: size.width,
-          ...(isComposeMinimized ? {} : { height: size.height })
+          height: size.height,
+          pointerEvents: 'auto'
         }}
       >
         {/* Header */}
-        <div
-          className={`flex items-center justify-between px-4 py-3 border-b cursor-move select-none ${
-            isComposeMinimized ? 'border-b-0' : ''
-          }`}
-          onMouseDown={handleMouseDown}
-        >
-          <div className="flex items-center gap-2">
-            <Move className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium truncate">
-              {getActionLabel()}
-              {composeData.subject && ` - ${composeData.subject}`}
-            </span>
+        <CardHeader className="p-0">
+          <div
+            className="flex items-center justify-between px-4 py-3 bg-muted/30 border-b border-border select-none"
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+              </div>
+              
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <Badge variant="secondary" className={cn("text-xs font-medium", getActionColor())}>
+                  {getActionLabel()}
+                </Badge>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-foreground truncate">
+                    {composeData.subject || "No Subject"}
+                  </div>
+                  {composeData.to && (
+                    <div className="text-xs text-muted-foreground truncate">
+                      To: {composeData.to}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-1" data-no-drag="true">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 hover:bg-muted transition-colors"
+                onClick={handleMinimize}
+                title="Minimize"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 hover:bg-destructive/20 hover:text-destructive transition-colors"
+                onClick={handleClose}
+                title="Close"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
-          
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 hover:bg-muted"
-              onClick={handleMinimize}
-            >
-              {isComposeMinimized ? <Square className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0 hover:bg-muted"
-              onClick={handleClose}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
+        </CardHeader>
 
         {/* Content */}
-        {!isComposeMinimized && (
-          <div className="overflow-hidden" style={{ height: size.height - 60 }}>
-            <ComposePanel
+        <CardContent className="p-0 flex-1 overflow-hidden">
+          <ComposePanel
               composeData={composeData}
               originalEmail={originalEmail}
               draftId={draftId}
               isInDialog={true}
             />
-          </div>
-        )}
+        </CardContent>
       </Card>
     </div>
   );

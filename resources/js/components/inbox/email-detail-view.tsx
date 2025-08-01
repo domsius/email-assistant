@@ -183,8 +183,8 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
       </div>
 
       {/* Email Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="max-w-4xl mx-auto p-6">
+      <div className="flex-1 overflow-auto bg-white">
+        <div className="mx-auto p-6">
           {/* Email Header */}
           <div className="mb-6">
             {/* <h1 className="text-3xl font-semibold mb-4 leading-tight">

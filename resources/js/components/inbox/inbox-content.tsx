@@ -7,7 +7,6 @@ import { EmailListSkeleton } from "./email-list/email-list-skeleton";
 import { EmailToolbar } from "./toolbar/email-toolbar";
 import { SearchBar } from "./search-bar";
 import { PaginationControls } from "./pagination-controls";
-import { EmailListHeader } from "./email-list-header";
 import { useInbox } from "@/contexts/inbox-context";
 import { ComposeDialog } from "./compose-dialog";
 import { GmailEmailTable } from "./gmail-email-table";

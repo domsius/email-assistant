@@ -118,12 +118,18 @@ export function ComposePanel({
   };
   
   const [fromAccount, setFromAccount] = useState<string>(getDefaultFromAccount());
+  // Using refs for uncontrolled components to test if this fixes the input issue
+  const toRef = useRef<HTMLInputElement>(null);
+  const ccRef = useRef<HTMLInputElement>(null);
+  const bccRef = useRef<HTMLInputElement>(null);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  
   const [formData, setFormData] = useState({
-    to: composeData.to,
-    cc: composeData.cc,
-    bcc: composeData.bcc,
-    subject: composeData.subject,
-    body: composeData.body,
+    to: composeData.to || "",
+    cc: composeData.cc || "",
+    bcc: composeData.bcc || "",
+    subject: composeData.subject || "",
+    body: composeData.body || "",
   });
 
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -135,25 +141,38 @@ export function ComposePanel({
     setHasUnsavedChanges(true);
     setDraftSaveStatus(null); // Clear status when user makes changes
   }, []);
-
+  
+  // Debug effect
   useEffect(() => {
-    // Focus on appropriate field only on initial mount
-    if (!formData.to && composeData.action !== "forward") {
-      document.getElementById("compose-to")?.focus();
-    } else if (!formData.subject) {
-      document.getElementById("compose-subject")?.focus();
-    } else {
-      bodyRef.current?.focus();
-      // Place cursor at beginning of body for replies
-      if (composeData.action === "reply" || composeData.action === "replyAll") {
-        bodyRef.current?.setSelectionRange(0, 0);
-      }
-    }
-  }, []); // Empty dependency array - only run on mount
+    console.log('Form data updated:', formData);
+  }, [formData]);
+
+  // Temporarily disabled auto-focus to debug input issue
+  // useEffect(() => {
+  //   // Focus on appropriate field only on initial mount
+  //   if (!formData.to && composeData.action !== "forward") {
+  //     document.getElementById("compose-to")?.focus();
+  //   } else if (!formData.subject) {
+  //     document.getElementById("compose-subject")?.focus();
+  //   } else {
+  //     bodyRef.current?.focus();
+  //     // Place cursor at beginning of body for replies
+  //     if (composeData.action === "reply" || composeData.action === "replyAll") {
+  //       bodyRef.current?.setSelectionRange(0, 0);
+  //     }
+  //   }
+  // }, []); // Empty dependency array - only run on mount
 
   // Auto-save draft
   const saveDraft = useCallback(async () => {
     if (isSavingDraft) return;
+
+    // Get values from refs
+    const toValue = toRef.current?.value || "";
+    const ccValue = ccRef.current?.value || "";
+    const bccValue = bccRef.current?.value || "";
+    const subjectValue = subjectRef.current?.value || "";
+    const bodyValue = bodyRef.current?.value || "";
 
     // Get the account to use for saving
     let accountToUse: number | null = null;
@@ -184,11 +203,11 @@ export function ComposePanel({
     try {
       const response = await axios.post("/drafts/save", {
         id: draftId,
-        to: formData.to,
-        cc: formData.cc,
-        bcc: formData.bcc,
-        subject: formData.subject,
-        body: formData.body,
+        to: toValue,
+        cc: ccValue,
+        bcc: bccValue,
+        subject: subjectValue,
+        body: bodyValue,
         action: composeData.action,
         inReplyTo: composeData.inReplyTo,
         references: composeData.references,
@@ -230,7 +249,6 @@ export function ComposePanel({
       setIsSavingDraft(false);
     }
   }, [
-    formData,
     draftId,
     composeData,
     originalEmail,
@@ -239,41 +257,41 @@ export function ComposePanel({
     emailAccounts,
   ]);
 
-  // Debounced auto-save
-  useEffect(() => {
-    // Only set up auto-save if there are unsaved changes
-    if (!hasUnsavedChanges) {
-      return;
-    }
+  // Debounced auto-save - temporarily disabled while testing uncontrolled inputs
+  // useEffect(() => {
+  //   // Only set up auto-save if there are unsaved changes
+  //   if (!hasUnsavedChanges) {
+  //     return;
+  //   }
 
-    // Clear existing timeout
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
+  //   // Clear existing timeout
+  //   if (saveTimeoutRef.current) {
+  //     clearTimeout(saveTimeoutRef.current);
+  //   }
 
-    // Don't auto-save if nothing to save
-    if (
-      !formData.to &&
-      !formData.cc &&
-      !formData.bcc &&
-      !formData.subject &&
-      !formData.body
-    ) {
-      return;
-    }
+  //   // Don't auto-save if nothing to save
+  //   if (
+  //     !formData.to &&
+  //     !formData.cc &&
+  //     !formData.bcc &&
+  //     !formData.subject &&
+  //     !formData.body
+  //   ) {
+  //     return;
+  //   }
 
-    // Set new timeout for auto-save
-    saveTimeoutRef.current = setTimeout(() => {
-      saveDraft();
-    }, 2000); // Save after 2 seconds of inactivity
+  //   // Set new timeout for auto-save
+  //   saveTimeoutRef.current = setTimeout(() => {
+  //     saveDraft();
+  //   }, 10000); // Save after 10 seconds of inactivity
 
-    // Cleanup
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [formData, saveDraft, hasUnsavedChanges]);
+  //   // Cleanup
+  //   return () => {
+  //     if (saveTimeoutRef.current) {
+  //       clearTimeout(saveTimeoutRef.current);
+  //     }
+  //   };
+  // }, [formData, saveDraft, hasUnsavedChanges]);
 
   const handleFormat = useCallback(
     (format: "bold" | "italic" | "underline") => {
@@ -282,7 +300,8 @@ export function ComposePanel({
 
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const selectedText = formData.body.substring(start, end);
+      const currentValue = textarea.value;
+      const selectedText = currentValue.substring(start, end);
 
       if (selectedText) {
         let formattedText = "";
@@ -299,10 +318,12 @@ export function ComposePanel({
         }
 
         const newBody =
-          formData.body.substring(0, start) +
+          currentValue.substring(0, start) +
           formattedText +
-          formData.body.substring(end);
-        handleFormChange("body", newBody);
+          currentValue.substring(end);
+        
+        // Update the textarea value directly
+        textarea.value = newBody;
 
         // Restore cursor position after the formatted text
         setTimeout(() => {
@@ -330,10 +351,12 @@ export function ComposePanel({
         }
 
         const newBody =
-          formData.body.substring(0, start) +
+          currentValue.substring(0, start) +
           tags +
-          formData.body.substring(start);
-        handleFormChange("body", newBody);
+          currentValue.substring(start);
+        
+        // Update the textarea value directly
+        textarea.value = newBody;
 
         // Place cursor inside the tags
         setTimeout(() => {
@@ -343,41 +366,49 @@ export function ComposePanel({
         }, 0);
       }
     },
-    [formData.body, handleFormChange],
+    [],
   );
 
-  // Keyboard shortcuts for formatting
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.target === bodyRef.current) {
-        switch (e.key.toLowerCase()) {
-          case "b":
-            e.preventDefault();
-            handleFormat("bold");
-            break;
-          case "i":
-            e.preventDefault();
-            handleFormat("italic");
-            break;
-          case "u":
-            e.preventDefault();
-            handleFormat("underline");
-            break;
-        }
-      }
-    };
+  // Temporarily disabled keyboard shortcuts to debug input issue
+  // // Keyboard shortcuts for formatting
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => {
+  //     if ((e.ctrlKey || e.metaKey) && e.target === bodyRef.current) {
+  //       switch (e.key.toLowerCase()) {
+  //         case "b":
+  //           e.preventDefault();
+  //           handleFormat("bold");
+  //           break;
+  //         case "i":
+  //           e.preventDefault();
+  //           handleFormat("italic");
+  //           break;
+  //         case "u":
+  //           e.preventDefault();
+  //           handleFormat("underline");
+  //           break;
+  //       }
+  //     }
+  //   };
 
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [formData.body, handleFormat]);
+  //   document.addEventListener("keydown", handleKeyDown);
+  //   return () => document.removeEventListener("keydown", handleKeyDown);
+  // }, [formData.body, handleFormat]);
 
   const handleSend = async () => {
-    if (!formData.to && !formData.cc && !formData.bcc) {
+    // Get values from refs
+    const toValue = toRef.current?.value || "";
+    const ccValue = ccRef.current?.value || "";
+    const bccValue = bccRef.current?.value || "";
+    const subjectValue = subjectRef.current?.value || "";
+    const bodyValue = bodyRef.current?.value || "";
+
+    if (!toValue && !ccValue && !bccValue) {
       toast.error("Please add at least one recipient");
       return;
     }
 
-    if (!formData.subject) {
+    if (!subjectValue) {
       if (!confirm("Send email without a subject?")) {
         return;
       }
@@ -407,11 +438,11 @@ export function ComposePanel({
       {
         emailAccountId,
         fromAlias,
-        to: formData.to,
-        cc: formData.cc || "",
-        bcc: formData.bcc || "",
-        subject: formData.subject || "(No Subject)",
-        body: formData.body,
+        to: toValue,
+        cc: ccValue || "",
+        bcc: bccValue || "",
+        subject: subjectValue || "(No Subject)",
+        body: bodyValue,
         draftId: draftId,
         inReplyTo: composeData.inReplyTo || null,
         references: composeData.references || null,
@@ -523,14 +554,18 @@ export function ComposePanel({
       const data = await response.json();
 
       // Handle the response - check for different possible response structures
+      let aiContent = "";
       if (data?.data?.draft?.ai_generated_content) {
-        handleFormChange("body", data.data.draft.ai_generated_content);
-        toast.success("AI response generated successfully");
+        aiContent = data.data.draft.ai_generated_content;
       } else if (data?.response) {
-        handleFormChange("body", data.response);
-        toast.success("AI response generated successfully");
+        aiContent = data.response;
       } else if (data?.ai_generated_content) {
-        handleFormChange("body", data.ai_generated_content);
+        aiContent = data.ai_generated_content;
+      }
+
+      if (aiContent && bodyRef.current) {
+        // Set the AI generated content directly on the textarea
+        bodyRef.current.value = aiContent;
         toast.success("AI response generated successfully");
       } else {
         console.error("Unexpected response format:", data);
@@ -681,7 +716,7 @@ export function ComposePanel({
 
   // Content component that can be used with or without the Card wrapper
   const ComposeContent = () => (
-    <>
+    <div className={`flex flex-col ${isInDialog ? 'h-full' : ''}`}>
       {!isInDialog && (
         <CardHeader className="border-b px-6 py-4">
           <div className="flex items-center justify-between">
@@ -696,11 +731,12 @@ export function ComposePanel({
         </CardHeader>
       )}
 
-      <div className={`flex-1 flex flex-col ${isInDialog ? 'p-0' : ''}`}>
+      <div className={`flex-1 flex flex-col ${isInDialog ? 'p-0 overflow-hidden' : ''}`}>
+
           <div className="space-y-0">
             {/* From Field */}
-            <div className="flex items-center border-b px-6 py-3">
-              <Label htmlFor="compose-from" className="text-sm font-medium w-20">
+            <div className="flex items-center border-b border-border px-4 py-2">
+              <Label htmlFor="compose-from" className="text-sm font-medium text-muted-foreground w-16">
                 From
               </Label>
               <Select value={fromAccount} onValueChange={setFromAccount}>
@@ -710,7 +746,7 @@ export function ComposePanel({
                 >
                   <SelectValue placeholder="Select an email account" />
                 </SelectTrigger>
-                <SelectContent className="z-[10000]">
+                <SelectContent className="z-[10001]">
                   {emailAccounts.map((account) => (
                     <React.Fragment key={account.id}>
                       {/* Main account email */}
@@ -750,17 +786,17 @@ export function ComposePanel({
             </div>
 
             {/* To Field */}
-            <div className="flex items-center border-b px-6 py-3">
-              <Label htmlFor="compose-to" className="text-sm font-medium w-20">
+            <div className="flex items-center border-b border-border px-4 py-2">
+              <Label htmlFor="compose-to" className="text-sm font-medium text-muted-foreground w-16">
                 To
               </Label>
-              <Input
+              <input
+                ref={toRef}
                 id="compose-to"
-                type="email"
+                type="text"
                 placeholder="Recipients"
-                value={formData.to}
-                onChange={(e) => handleFormChange("to", e.target.value)}
-                className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3"
+                defaultValue={composeData.to || ""}
+                className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3 h-9 outline-none"
               />
               <div className="flex items-center gap-1">
                 <Button
@@ -784,65 +820,65 @@ export function ComposePanel({
 
             {/* CC Field */}
             {showCc && (
-              <div className="flex items-center border-b px-6 py-3">
+              <div className="flex items-center border-b border-border px-4 py-2">
                 <Label
                   htmlFor="compose-cc"
-                  className="text-sm font-medium w-20"
+                  className="text-sm font-medium text-muted-foreground w-16"
                 >
                   Cc
                 </Label>
-                <Input
+                <input
+                  ref={ccRef}
                   id="compose-cc"
-                  type="email"
+                  type="text"
                   placeholder="Cc Recipients"
-                  value={formData.cc}
-                  onChange={(e) => handleFormChange("cc", e.target.value)}
-                  className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3"
+                  defaultValue={composeData.cc || ""}
+                  className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3 h-9 outline-none"
                 />
               </div>
             )}
 
             {/* BCC Field */}
             {showBcc && (
-              <div className="flex items-center border-b px-6 py-3">
+              <div className="flex items-center border-b border-border px-4 py-2">
                 <Label
                   htmlFor="compose-bcc"
-                  className="text-sm font-medium w-20"
+                  className="text-sm font-medium text-muted-foreground w-16"
                 >
                   Bcc
                 </Label>
-                <Input
+                <input
+                  ref={bccRef}
                   id="compose-bcc"
-                  type="email"
+                  type="text"
                   placeholder="Bcc Recipients"
-                  value={formData.bcc}
-                  onChange={(e) => handleFormChange("bcc", e.target.value)}
-                  className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3"
+                  defaultValue={composeData.bcc || ""}
+                  className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3 h-9 outline-none"
                 />
               </div>
             )}
 
             {/* Subject Field */}
-            <div className="flex items-center border-b px-6 py-3">
+            <div className="flex items-center border-b border-border px-4 py-2">
               <Label
                 htmlFor="compose-subject"
-                className="text-sm font-medium w-20"
+                className="text-sm font-medium text-muted-foreground w-16"
               >
                 Subject
               </Label>
-              <Input
+              <input
+                ref={subjectRef}
                 id="compose-subject"
                 type="text"
                 placeholder="Subject"
-                value={formData.subject}
-                onChange={(e) => handleFormChange("subject", e.target.value)}
-                className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3"
+                defaultValue={composeData.subject || ""}
+                className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3 h-9 outline-none"
               />
             </div>
           </div>
 
           {/* Body */}
-          <div className="flex-1 px-6 py-4">
+          <div className="flex-1 px-4 py-3 overflow-y-auto">
             {showPreview ? (
               <div className="min-h-[300px] h-full p-0">
                 <div className="mb-2 text-sm text-muted-foreground">
@@ -850,16 +886,15 @@ export function ComposePanel({
                 </div>
                 <div
                   className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: formData.body }}
+                  dangerouslySetInnerHTML={{ __html: bodyRef.current?.value || "" }}
                 />
               </div>
             ) : (
-              <Textarea
+              <textarea
                 ref={bodyRef}
                 placeholder="Write your message..."
-                value={formData.body}
-                onChange={(e) => handleFormChange("body", e.target.value)}
-                className="min-h-[300px] h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0"
+                defaultValue={composeData.body || ""}
+                className="w-full h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0 outline-none"
               />
             )}
           </div>
@@ -926,18 +961,19 @@ export function ComposePanel({
           )}
 
           {/* Toolbar */}
-          <div className="border-t">
-            <div className="flex items-center justify-between px-6 py-3">
+          <div className="border-t bg-card">
+            {/* Formatting buttons row */}
+            <div className="flex items-center px-4 py-2 border-b border-border">
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
                   title="Attach file"
                   onClick={() => fileInputRef.current?.click()}
                   type="button"
                 >
-                  <Paperclip className="h-4 w-4" />
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
                 </Button>
                 <input
                   ref={fileInputRef}
@@ -947,140 +983,115 @@ export function ComposePanel({
                   onChange={handleFileSelect}
                   accept="*/*"
                 />
-                <Separator orientation="vertical" className="mx-1 h-6" />
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    title="Bold (Ctrl+B)"
-                    onClick={() => handleFormat("bold")}
-                    type="button"
-                  >
-                    <Bold className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    title="Italic (Ctrl+I)"
-                    onClick={() => handleFormat("italic")}
-                    type="button"
-                  >
-                    <Italic className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    title="Underline (Ctrl+U)"
-                    onClick={() => handleFormat("underline")}
-                    type="button"
-                  >
-                    <Underline className="h-4 w-4" />
-                  </Button>
-                </div>
-                <Separator orientation="vertical" className="mx-1 h-6" />
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    title="Insert link"
-                    type="button"
-                  >
-                    <Link className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    title="Insert image"
-                    type="button"
-                  >
-                    <Image className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    title="Insert emoji"
-                    type="button"
-                  >
-                    <Smile className="h-4 w-4" />
-                  </Button>
-                </div>
-                <Separator orientation="vertical" className="mx-1 h-6" />
+                
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 px-2 gap-1"
+                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+                  title="Bold (Ctrl+B)"
+                  onClick={() => handleFormat("bold")}
+                  type="button"
+                >
+                  <Bold className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+                  title="Italic (Ctrl+I)"
+                  onClick={() => handleFormat("italic")}
+                  type="button"
+                >
+                  <Italic className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+                  title="Underline (Ctrl+U)"
+                  onClick={() => handleFormat("underline")}
+                  type="button"
+                >
+                  <Underline className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+                  title="Insert link"
+                  type="button"
+                >
+                  <Link className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+                  title="Insert image"
+                  type="button"
+                >
+                  <Image className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+                  title="Insert emoji"
+                  type="button"
+                >
+                  <Smile className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 gap-1 hover:bg-accent hover:text-accent-foreground"
                   title="Toggle preview"
                   onClick={() => setShowPreview(!showPreview)}
                   type="button"
                 >
-                  {showPreview ? (
-                    <>
-                      <Pencil className="h-4 w-4" />
-                      <span className="text-xs">Edit</span>
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-4 w-4" />
-                      <span className="text-xs">Preview</span>
-                    </>
-                  )}
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Preview</span>
                 </Button>
-                {originalEmail &&
-                  (composeData.action === "reply" ||
-                    composeData.action === "replyAll") && (
-                    <>
-                      <Separator orientation="vertical" className="mx-1 h-6" />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-3 gap-2"
-                        title="Generate response with AI"
-                        onClick={handleGenerateAI}
-                        disabled={isGeneratingAI}
-                      >
-                        <Sparkles
-                          className={`h-4 w-4 ${isGeneratingAI ? "animate-pulse" : ""}`}
-                        />
-                        <span className="text-xs">Generate with AI</span>
-                      </Button>
-                    </>
-                  )}
-                <Separator orientation="vertical" className="mx-1 h-6" />
+                
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
                   title="More options"
                 >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={handleCancel}>
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={handleSend} disabled={isSending}>
-                  {isSending ? (
-                    <>Sending...</>
-                  ) : (
-                    <>
-                      Send
-                      <Send className="ml-2 h-4 w-4" />
-                    </>
-                  )}
+                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </div>
             </div>
+
+            {/* Action buttons row */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleCancel}
+                className="text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                Cancel
+              </Button>
+              <Button 
+                size="sm" 
+                onClick={handleSend} 
+                disabled={isSending}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-6"
+              >
+                {isSending ? (
+                  <>Sending...</>
+                ) : (
+                  <>Send</>
+                )}
+              </Button>
+            </div>
           </div>
       </div>
-    </>
+    </div>
   );
 
   if (isInDialog) {

@@ -146,7 +146,7 @@ export function GmailInboxContent({ pagination }: GmailInboxContentProps) {
         <ComposeDialog
           composeData={composeData}
           originalEmail={composeData.originalEmail}
-          draftId={composeData.draftId}
+          draftId={composeData.draftId || undefined}
         />
       )}
     </TooltipProvider>
