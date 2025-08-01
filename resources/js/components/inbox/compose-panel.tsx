@@ -103,7 +103,7 @@ export function ComposePanel({
   }, []);
 
   useEffect(() => {
-    // Focus on appropriate field
+    // Focus on appropriate field only on initial mount
     if (!formData.to && composeData.action !== "forward") {
       document.getElementById("compose-to")?.focus();
     } else if (!formData.subject) {
@@ -115,7 +115,7 @@ export function ComposePanel({
         bodyRef.current?.setSelectionRange(0, 0);
       }
     }
-  }, [composeData.action, formData.to, formData.subject]);
+  }, []); // Empty dependency array - only run on mount
 
   // Auto-save draft
   const saveDraft = useCallback(async () => {
