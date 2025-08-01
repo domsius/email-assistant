@@ -33,6 +33,7 @@ interface ComposeData {
   references?: string[];
   originalEmail?: EmailMessage;
   draftId?: number | null;
+  defaultFrom?: string; // The email address that received the original email
 }
 
 interface InboxActions {

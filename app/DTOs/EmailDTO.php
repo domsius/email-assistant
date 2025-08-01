@@ -32,6 +32,7 @@ class EmailDTO
         public readonly ?EmailUrgency $urgency,
         public readonly ?AiAnalysisDTO $aiAnalysis,
         public readonly array $attachments,
+        public readonly ?string $recipients = null,
     ) {}
 
     public static function fromModel(EmailMessage $email): self
@@ -70,6 +71,17 @@ class EmailDTO
             $content = self::sanitizeHtml($email->body_html ?? $email->body_plain ?? $email->body_content ?? '', $email);
         }
 
+        // Extract the primary recipient (first email in to_recipients)
+        $recipients = null;
+        if ($email->to_recipients) {
+            $toRecipients = is_string($email->to_recipients) 
+                ? json_decode($email->to_recipients, true) 
+                : $email->to_recipients;
+            if (is_array($toRecipients) && !empty($toRecipients)) {
+                $recipients = $toRecipients[0];
+            }
+        }
+
         return new self(
             id: $email->id,
             subject: self::sanitizeText($email->subject ?? ''),
@@ -102,6 +114,7 @@ class EmailDTO
                     'downloadUrl' => $attachment->download_url,
                     'thumbnailUrl' => $attachment->thumbnail_url,
                 ])->toArray() : [],
+            recipients: $recipients,
         );
     }
 
@@ -220,6 +233,7 @@ class EmailDTO
             'urgency' => $this->urgency?->value,
             'aiAnalysis' => $this->aiAnalysis?->toArray(),
             'attachments' => $this->attachments,
+            'recipients' => $this->recipients,
         ];
     }
 }

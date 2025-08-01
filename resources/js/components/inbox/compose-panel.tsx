@@ -48,6 +48,7 @@ interface ComposePanelProps {
     action?: "new" | "reply" | "replyAll" | "forward" | "draft";
     inReplyTo?: string;
     references?: string[];
+    defaultFrom?: string;
   };
   originalEmail?: {
     id: number | string;
@@ -76,15 +77,6 @@ export function ComposePanel({
   draftId: initialDraftId,
 }: ComposePanelProps) {
   const { exitComposeMode, selectedAccount, emailAccounts, setJustSentEmail } = useInbox();
-  
-  // Debug logging
-  console.log("Email accounts:", emailAccounts);
-  emailAccounts.forEach(account => {
-    console.log(`Account ${account.email}:`, account);
-    if (account.aliases) {
-      console.log(`  Aliases:`, account.aliases);
-    }
-  });
   const [showCc, setShowCc] = useState(!!composeData.cc);
   const [showBcc, setShowBcc] = useState(!!composeData.bcc);
   const [isSending, setIsSending] = useState(false);
@@ -99,9 +91,31 @@ export function ComposePanel({
   const [showPreview, setShowPreview] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [fromAccount, setFromAccount] = useState<string>(
-    selectedAccount?.toString() || emailAccounts[0]?.id.toString() || ""
-  );
+  // Determine the default from account
+  const getDefaultFromAccount = () => {
+    if (composeData.defaultFrom) {
+      // Find the account that has this email address (either main or alias)
+      for (const account of emailAccounts) {
+        // Check if it's the main account email
+        if (account.email === composeData.defaultFrom) {
+          return account.id.toString();
+        }
+        // Check if it's an alias
+        if (account.aliases) {
+          const alias = account.aliases.find(
+            (a: any) => a.email_address === composeData.defaultFrom
+          );
+          if (alias) {
+            return `${account.id}:${alias.email_address}`;
+          }
+        }
+      }
+    }
+    // Fall back to selected account or first account
+    return selectedAccount?.toString() || emailAccounts[0]?.id.toString() || "";
+  };
+  
+  const [fromAccount, setFromAccount] = useState<string>(getDefaultFromAccount());
   const [formData, setFormData] = useState({
     to: composeData.to,
     cc: composeData.cc,

@@ -50,6 +50,16 @@ export function InboxContent({ pagination }: InboxContentProps) {
 
   const handleReply = useCallback(() => {
     if (selectedEmail) {
+      // Try to determine which of our email addresses received this email
+      let defaultFrom: string | undefined;
+      
+      // Check if the email has recipients information
+      if (selectedEmail.recipients || selectedEmail.to) {
+        const recipientEmail = selectedEmail.recipients || selectedEmail.to;
+        // This will be the email address that received the message
+        defaultFrom = recipientEmail;
+      }
+      
       enterComposeMode({
         to: selectedEmail.senderEmail,
         subject: `Re: ${selectedEmail.subject}`,
@@ -57,12 +67,23 @@ export function InboxContent({ pagination }: InboxContentProps) {
         action: "reply",
         inReplyTo: selectedEmail.id.toString(),
         originalEmail: selectedEmail,
+        defaultFrom,
       });
     }
   }, [selectedEmail, enterComposeMode]);
 
   const handleReplyAll = useCallback(() => {
     if (selectedEmail) {
+      // Try to determine which of our email addresses received this email
+      let defaultFrom: string | undefined;
+      
+      // Check if the email has recipients information
+      if (selectedEmail.recipients || selectedEmail.to) {
+        const recipientEmail = selectedEmail.recipients || selectedEmail.to;
+        // This will be the email address that received the message
+        defaultFrom = recipientEmail;
+      }
+      
       enterComposeMode({
         to: selectedEmail.senderEmail,
         subject: `Re: ${selectedEmail.subject}`,
@@ -70,6 +91,7 @@ export function InboxContent({ pagination }: InboxContentProps) {
         action: "replyAll",
         inReplyTo: selectedEmail.id.toString(),
         originalEmail: selectedEmail,
+        defaultFrom,
       });
     }
   }, [selectedEmail, enterComposeMode]);
