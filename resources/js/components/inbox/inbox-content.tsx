@@ -144,13 +144,7 @@ export function InboxContent({ pagination }: InboxContentProps) {
     }
   }, [selectedEmail, enterComposeMode]);
 
-  // Auto-open drafts when selected
-  useEffect(() => {
-    if (selectedEmail?.isDraft && !isComposing) {
-      console.log("Auto-opening draft in compose mode");
-      handleEditDraft();
-    }
-  }, [selectedEmail?.id, selectedEmail?.isDraft, isComposing, handleEditDraft]);
+  // Removed auto-open drafts - drafts should be shown in preview mode first
 
   const handleDeleteDraft = useCallback(async () => {
     if (!selectedEmail || !selectedEmail.isDraft) {
