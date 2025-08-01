@@ -3,7 +3,9 @@ import { format } from "date-fns";
 import { 
   Star, 
   Paperclip, 
-  ArrowLeft
+  ArrowLeft,
+  Archive,
+  Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmailMessage } from "@/types/inbox";
@@ -285,14 +287,6 @@ export function GmailEmailTable({
           <span className="text-sm text-muted-foreground">
             {selectedEmails.length} selected
           </span>
-          <Button variant="ghost" size="sm">
-            <Archive className="h-4 w-4 mr-2" />
-            Archive
-          </Button>
-          <Button variant="ghost" size="sm">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
         </div>
       )}
       
