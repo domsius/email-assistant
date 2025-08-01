@@ -138,12 +138,6 @@ class EmailService
 
         // Transform drafts to email-like structure
         $draftData = $drafts->map(function ($draft) {
-            Log::info('Processing draft for listing', [
-                'draft_id' => $draft->id,
-                'has_original_email' => $draft->originalEmail ? true : false,
-                'original_email_id' => $draft->original_email_id,
-                'action' => $draft->action,
-            ]);
             return [
                 'id' => 'draft-'.$draft->id, // Prefix to distinguish from emails
                 'subject' => $draft->subject ?: '(No subject)',
@@ -248,12 +242,6 @@ class EmailService
 
         // Transform drafts to email-like structure
         $draftData = $drafts->map(function ($draft) {
-            Log::info('Processing draft for listing', [
-                'draft_id' => $draft->id,
-                'has_original_email' => $draft->originalEmail ? true : false,
-                'original_email_id' => $draft->original_email_id,
-                'action' => $draft->action,
-            ]);
             return [
                 'id' => 'draft-'.$draft->id, // Prefix to distinguish from emails
                 'subject' => $draft->subject ?: '(No subject)',

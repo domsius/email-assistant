@@ -129,11 +129,6 @@ class EmailController extends Controller
     {
         $user = auth()->user();
         
-        Log::info('showDraft called', [
-            'draft_id' => $draftId,
-            'user_id' => $user->id,
-        ]);
-        
         $draft = EmailDraft::where('id', $draftId)
             ->where('user_id', $user->id)
             ->where('is_deleted', false)
@@ -143,14 +138,6 @@ class EmailController extends Controller
         if (!$draft) {
             abort(404, 'Draft not found');
         }
-        
-        Log::info('Draft loaded', [
-            'draft_id' => $draft->id,
-            'has_original_email' => $draft->originalEmail ? true : false,
-            'original_email_id' => $draft->original_email_id,
-            'action' => $draft->action,
-            'original_email_subject' => $draft->originalEmail ? $draft->originalEmail->subject : null,
-        ]);
 
         // Ensure user can access this draft (check email account company)
         if ($draft->emailAccount->company_id !== $user->company_id) {

@@ -404,13 +404,6 @@ class EmailSyncService extends BaseService
                     // Regular attachment - download it
                     $content = $this->downloadGmailAttachment($emailAccount, $attachmentData);
                     
-                    Log::info('EmailSync: Downloaded attachment', [
-                        'email_id' => $emailMessage->id,
-                        'filename' => $attachmentData['filename'],
-                        'content_id' => $attachmentData['content_id'] ?? null,
-                        'content_size' => $content ? strlen($content) : 0,
-                        'has_content' => $content !== null,
-                    ]);
                 }
                 
                 if ($content) {
