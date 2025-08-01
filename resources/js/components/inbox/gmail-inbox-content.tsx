@@ -7,10 +7,8 @@ import { EmailDetailView } from "./email-detail-view";
 import { ComposeDialog } from "./compose-dialog";
 import { SearchBar } from "./search-bar";
 import { EmailToolbar } from "./toolbar/email-toolbar";
-import { EmailListHeader } from "./email-list-header";
 import { PaginationControls } from "./pagination-controls";
 import { EmailListSkeleton } from "./email-list/email-list-skeleton";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -68,8 +66,6 @@ export function GmailInboxContent({ pagination }: GmailInboxContentProps) {
         >
           {/* Header */}
           <div className="flex-shrink-0">
-            <EmailListHeader currentTab={activeFilter} />
-            <Separator />
             <SearchBar />
             <EmailToolbar />
           </div>

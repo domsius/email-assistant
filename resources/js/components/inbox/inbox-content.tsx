@@ -104,10 +104,7 @@ export function InboxContent({ pagination }: InboxContentProps) {
           onValueChange={handleTabChange}
           className="h-full flex flex-col"
         >
-          <div className="flex items-center justify-between px-4 pb-0">
-            <EmailListHeader
-              currentTab={activeFilter}
-            />
+          <div className="flex items-center justify-end px-4 pb-0">
             <SearchBar />
           </div>
 
