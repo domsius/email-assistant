@@ -34,6 +34,7 @@ export function InboxContent({ pagination }: InboxContentProps) {
     composeData,
     viewMode,
     setViewMode,
+    setSelectedEmails,
   } = useInbox();
 
   const [selectedEmailForDetail, setSelectedEmailForDetail] = useState<EmailMessage | null>(null);
@@ -42,12 +43,16 @@ export function InboxContent({ pagination }: InboxContentProps) {
     setSelectedEmail(email);
     setSelectedEmailForDetail(email);
     setViewMode("detail");
-  }, [setSelectedEmail, setViewMode]);
+    // Also select the email in the selection list for toolbar actions
+    setSelectedEmails([email.id]);
+  }, [setSelectedEmail, setViewMode, setSelectedEmails]);
 
   const handleBackToList = useCallback(() => {
     setViewMode("list");
     setSelectedEmailForDetail(null);
-  }, [setViewMode]);
+    // Clear selected emails when going back to list
+    setSelectedEmails([]);
+  }, [setViewMode, setSelectedEmails]);
 
   const handleTabChange = useCallback((value: string) => {
     setActiveFilter(value);
@@ -88,6 +93,16 @@ export function InboxContent({ pagination }: InboxContentProps) {
     return (
       <TooltipProvider delayDuration={0}>
         <div className="flex h-full flex-col">
+          <div className="flex items-center justify-end px-4 pb-0">
+            <SearchBar />
+          </div>
+
+          <Separator />
+
+          <EmailToolbar />
+
+          <Separator />
+          
           <EmailDetailView
             email={selectedEmailForDetail}
             onBackToList={handleBackToList}

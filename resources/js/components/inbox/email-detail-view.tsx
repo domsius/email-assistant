@@ -1,15 +1,12 @@
 import React, { useState, useCallback } from "react";
 import { format } from "date-fns";
+import { router } from "@inertiajs/react";
 import { 
   ArrowLeft,
   Reply,
   ReplyAll,
   Forward,
   Star,
-  MoreHorizontal,
-  Archive,
-  Trash2,
-  Clock,
   Paperclip,
   Send,
   Bold,
@@ -24,12 +21,6 @@ import { EmailMessage } from "@/types/inbox";
 import { useInbox } from "@/contexts/inbox-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -216,28 +207,6 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
               )}
             />
           </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Archive className="h-4 w-4 mr-2" />
-                Archive
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Clock className="h-4 w-4 mr-2" />
-                Snooze
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 

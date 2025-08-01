@@ -3,15 +3,13 @@ import { format } from "date-fns";
 import { 
   Star, 
   Paperclip, 
-  MoreHorizontal,
-  Archive,
-  Trash2,
-  Clock,
   ArrowLeft
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmailMessage } from "@/types/inbox";
 import { useInbox } from "@/contexts/inbox-context";
+import { router } from "@inertiajs/react";
+import { toast } from "sonner";
 import {
   Table,
   TableBody,
@@ -22,12 +20,6 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 
 interface GmailEmailTableProps {
@@ -63,7 +55,6 @@ function EmailTableHeader({
         <TableHead className="flex-1">Subject</TableHead>
         <TableHead className="w-12"></TableHead>
         <TableHead className="w-32 text-right">Date</TableHead>
-        <TableHead className="w-12"></TableHead>
       </TableRow>
     </TableHeader>
   );
@@ -75,7 +66,8 @@ function EmailTableRow({
   isChecked, 
   onSelect, 
   onToggleCheck, 
-  onToggleStar 
+  onToggleStar,
+  activeFolder 
 }: {
   email: EmailMessage;
   isSelected: boolean;
@@ -178,32 +170,6 @@ function EmailTableRow({
       <TableCell className="w-32 text-right text-sm text-muted-foreground">
         {formatDate(email.receivedAt || email.date || new Date().toISOString())}
       </TableCell>
-      
-      <TableCell className="w-12">
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Archive className="h-4 w-4 mr-2" />
-                Archive
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Clock className="h-4 w-4 mr-2" />
-                Snooze
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </TableCell>
     </TableRow>
   );
 }
@@ -262,27 +228,6 @@ export function GmailEmailTable({
                 )}
               />
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <Archive className="h-4 w-4 mr-2" />
-                  Archive
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Clock className="h-4 w-4 mr-2" />
-                  Snooze
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
         
