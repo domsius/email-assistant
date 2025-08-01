@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -23,7 +23,7 @@ import { ComposePanel } from "./compose-panel";
 import type { PaginationLinks, PaginationMeta } from "@/types/inbox";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/utils";
-import { useEffect } from "react";
+import { useEmailPolling } from "@/hooks/use-email-polling";
 
 interface InboxContentProps {
   pagination?: {
@@ -44,6 +44,8 @@ export function InboxContent({ pagination }: InboxContentProps) {
     isComposing,
     composeData,
     enterComposeMode,
+    justSentEmail,
+    setJustSentEmail,
   } = useInbox();
 
   const handleReply = useCallback(() => {
@@ -145,6 +147,32 @@ export function InboxContent({ pagination }: InboxContentProps) {
   }, [selectedEmail, enterComposeMode]);
 
   // Removed auto-open drafts - drafts should be shown in preview mode first
+
+  // Use polling when in sent folder and email was just sent
+  const { stopPolling } = useEmailPolling({
+    enabled: justSentEmail && activeFolder === "sent",
+    folder: "sent",
+    interval: 3000, // Check every 3 seconds
+    maxAttempts: 10, // Stop after 30 seconds
+  });
+
+  // Clear the justSentEmail flag when leaving sent folder or after polling completes
+  useEffect(() => {
+    if (justSentEmail && activeFolder !== "sent") {
+      setJustSentEmail(false);
+    }
+  }, [activeFolder, justSentEmail, setJustSentEmail]);
+
+  // Also clear the flag after a timeout
+  useEffect(() => {
+    if (justSentEmail) {
+      const timeout = setTimeout(() => {
+        setJustSentEmail(false);
+      }, 30000); // Clear after 30 seconds
+
+      return () => clearTimeout(timeout);
+    }
+  }, [justSentEmail, setJustSentEmail]);
 
   const handleDeleteDraft = useCallback(async () => {
     if (!selectedEmail || !selectedEmail.isDraft) {

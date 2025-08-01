@@ -69,7 +69,7 @@ export function ComposePanel({
   draftId: initialDraftId,
 }: ComposePanelProps) {
   console.log("ComposePanel received:", { composeData, originalEmail, initialDraftId });
-  const { exitComposeMode, selectedAccount, emailAccounts } = useInbox();
+  const { exitComposeMode, selectedAccount, emailAccounts, setJustSentEmail } = useInbox();
   const [showCc, setShowCc] = useState(!!composeData.cc);
   const [showBcc, setShowBcc] = useState(!!composeData.bcc);
   const [isSending, setIsSending] = useState(false);
@@ -370,7 +370,7 @@ export function ComposePanel({
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
-          toast.success("Email sent successfully");
+          toast.success("Email queued for sending");
 
           // Clear form and exit compose mode
           setFormData({
@@ -381,15 +381,34 @@ export function ComposePanel({
             body: "",
           });
 
-          // Navigate to sent folder - this will also refresh the email list
-          router.visit("/inbox?folder=sent", {
-            preserveState: false,
-            preserveScroll: true,
-            only: ["emails", "folders"],
-          });
+          // Set flag that email was just sent
+          setJustSentEmail(true);
 
-          // Exit compose mode
+          // Exit compose mode first
           exitComposeMode();
+
+          // If we're not already in the sent folder, navigate to it
+          const currentUrl = new URL(window.location.href);
+          const currentFolder = currentUrl.searchParams.get("folder") || "inbox";
+          
+          if (currentFolder !== "sent") {
+            // Navigate to sent folder after a short delay to allow the email to be processed
+            setTimeout(() => {
+              router.visit("/inbox?folder=sent", {
+                preserveState: false,
+                preserveScroll: true,
+                only: ["emails", "folders", "pagination"],
+              });
+            }, 1000);
+          } else {
+            // If already in sent folder, refresh after a delay
+            setTimeout(() => {
+              router.reload({
+                only: ["emails", "folders", "pagination"],
+                preserveScroll: true,
+              });
+            }, 2000); // Give more time for the queue to process
+          }
         },
         onError: (errors) => {
           // Handle validation errors

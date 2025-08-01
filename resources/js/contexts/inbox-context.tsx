@@ -19,6 +19,7 @@ interface InboxState {
   isLoading: boolean;
   isComposing: boolean;
   composeData: ComposeData | null;
+  justSentEmail: boolean;
 }
 
 interface ComposeData {
@@ -55,6 +56,7 @@ interface InboxActions {
   handleSync: (selectedAccount: number | null) => void;
   enterComposeMode: (data: ComposeData) => void;
   exitComposeMode: () => void;
+  setJustSentEmail: (sent: boolean) => void;
 }
 
 interface InboxContextValue extends InboxState, InboxActions {
@@ -95,6 +97,7 @@ export function InboxProvider({
     isLoading: false,
     isComposing: false,
     composeData: null,
+    justSentEmail: false,
   });
 
   // Update activeFilter when currentFilter prop changes
@@ -550,6 +553,13 @@ export function InboxProvider({
     }));
   }, []);
 
+  const setJustSentEmail = useCallback((sent: boolean) => {
+    setState((prev) => ({
+      ...prev,
+      justSentEmail: sent,
+    }));
+  }, []);
+
   const value: InboxContextValue = {
     ...state,
     emails,
@@ -576,6 +586,7 @@ export function InboxProvider({
     handleSync,
     enterComposeMode,
     exitComposeMode,
+    setJustSentEmail,
   };
 
   return (
