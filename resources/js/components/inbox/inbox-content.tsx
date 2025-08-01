@@ -131,7 +131,7 @@ export function InboxContent({ pagination }: InboxContentProps) {
         bcc: fullEmail.bcc || fullEmail.bcc_recipients || "",
         subject: fullEmail.subject || "",
         body: fullEmail.content || fullEmail.body_content || fullEmail.plainTextContent || "", // Draft content goes in body
-        action: "draft" as const,
+        action: (fullEmail.action || "draft") as "new" | "reply" | "replyAll" | "forward" | "draft",
         draftId:
           typeof fullEmail.id === "string" && fullEmail.id.startsWith("draft-")
             ? parseInt(fullEmail.id.replace("draft-", ""))
