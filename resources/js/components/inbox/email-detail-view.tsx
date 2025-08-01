@@ -83,7 +83,38 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
     });
   }, [email]);
 
-  const handleCancelReply = useCallback(() => {
+  const handleCancelReply = useCallback(async () => {
+    // Save as draft if there's content
+    if (replyState.body.trim() || replyState.subject.trim()) {
+      try {
+        const response = await fetch('/drafts/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            to: replyState.to,
+            cc: replyState.cc,
+            subject: replyState.subject,
+            body: replyState.body,
+            in_reply_to: email.id,
+            is_reply: replyState.replyType === 'reply' || replyState.replyType === 'replyAll',
+          }),
+        });
+
+        if (response.ok) {
+          toast.success('Draft saved');
+        }
+      } catch (error) {
+        console.error('Failed to save draft:', error);
+        toast.error('Failed to save draft');
+      }
+    }
+    
+    // Reset reply state
     setReplyState({
       isReplying: false,
       replyType: null,
@@ -92,7 +123,7 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
       subject: "",
       body: ""
     });
-  }, []);
+  }, [replyState, email.id]);
 
   const handleSendReply = useCallback(() => {
     // Use the existing compose functionality
@@ -411,7 +442,7 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
                     Send
                   </Button>
                   <Button variant="outline" onClick={handleCancelReply}>
-                    Cancel
+                    {replyState.body.trim() || replyState.subject.trim() ? 'Save as Draft' : 'Cancel'}
                   </Button>
                 </div>
                 
