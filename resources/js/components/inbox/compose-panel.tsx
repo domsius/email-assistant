@@ -8,6 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { authenticatedFetch, cn } from "@/lib/utils";
 import {
   Send,
@@ -83,6 +90,9 @@ export function ComposePanel({
   const [showPreview, setShowPreview] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fromAccount, setFromAccount] = useState<string>(
+    selectedAccount?.toString() || emailAccounts[0]?.id.toString() || ""
+  );
   const [formData, setFormData] = useState({
     to: composeData.to,
     cc: composeData.cc,
@@ -121,7 +131,7 @@ export function ComposePanel({
     if (isSavingDraft) return;
 
     // Get the account to use for saving
-    let accountToUse = selectedAccount;
+    let accountToUse = fromAccount ? parseInt(fromAccount) : null;
 
     // If no account is selected, try to use the first available account
     if (!accountToUse && emailAccounts.length > 0) {
@@ -196,7 +206,7 @@ export function ComposePanel({
     composeData,
     originalEmail,
     isSavingDraft,
-    selectedAccount,
+    fromAccount,
     emailAccounts,
   ]);
 
@@ -344,7 +354,7 @@ export function ComposePanel({
       }
     }
 
-    if (!selectedAccount) {
+    if (!fromAccount) {
       toast.error("Please select an email account");
       return;
     }
@@ -354,7 +364,7 @@ export function ComposePanel({
     router.post(
       "/emails/send",
       {
-        emailAccountId: selectedAccount,
+        emailAccountId: parseInt(fromAccount),
         to: formData.to,
         cc: formData.cc || "",
         bcc: formData.bcc || "",
@@ -398,15 +408,14 @@ export function ComposePanel({
                 preserveScroll: true,
                 only: ["emails", "folders", "pagination"],
               });
-            }, 500); // Reduced to 0.5 seconds
+            }, 0); // Reduced to 0.5 seconds
           } else {
             // If already in sent folder, refresh after a delay
             setTimeout(() => {
               router.reload({
                 only: ["emails", "folders", "pagination"],
-                preserveScroll: true,
               });
-            }, 1000); // Reduced to 1 second
+            }, 250); // Reduced to 1 second
           }
         },
         onError: (errors) => {
@@ -517,7 +526,7 @@ export function ComposePanel({
       try {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("email_account_id", selectedAccount?.toString() || "");
+        formData.append("email_account_id", fromAccount || "");
 
         const response = await authenticatedFetch("/api/attachments/upload", {
           method: "POST",
@@ -645,6 +654,35 @@ export function ComposePanel({
 
         <CardContent className="flex-1 flex flex-col p-0">
           <div className="space-y-0">
+            {/* From Field */}
+            <div className="flex items-center border-b px-6 py-3">
+              <Label htmlFor="compose-from" className="text-sm font-medium w-20">
+                From
+              </Label>
+              <Select value={fromAccount} onValueChange={setFromAccount}>
+                <SelectTrigger 
+                  id="compose-from" 
+                  className="flex-1 border-0 bg-transparent focus:ring-0 px-3"
+                >
+                  <SelectValue placeholder="Select an email account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {emailAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id.toString()}>
+                      <div className="flex items-center gap-2">
+                        <span>{account.email}</span>
+                        {account.provider && (
+                          <span className="text-xs text-muted-foreground">
+                            ({account.provider})
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* To Field */}
             <div className="flex items-center border-b px-6 py-3">
               <Label htmlFor="compose-to" className="text-sm font-medium w-20">
