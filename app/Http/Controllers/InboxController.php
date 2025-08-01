@@ -56,12 +56,11 @@ class InboxController extends Controller
 
         // Auto-select first active account if none specified
         if ($selectedAccountId === null) {
-            $firstActiveAccount = $this->emailService->getEmailAccounts($user->company_id)
-                ->where('is_active', true)
-                ->first();
+            $emailAccounts = $this->emailService->getEmailAccounts($user->company_id);
+            $firstActiveAccount = $emailAccounts->firstWhere('is_active', true);
 
             if ($firstActiveAccount) {
-                $selectedAccountId = $firstActiveAccount->id;
+                $selectedAccountId = $firstActiveAccount['id'];
             }
         }
 
