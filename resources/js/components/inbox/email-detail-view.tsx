@@ -87,14 +87,12 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
     // Save as draft if there's content
     if (replyState.body.trim() || replyState.subject.trim()) {
       try {
-        const response = await fetch('/drafts/save', {
+        const response = await authenticatedFetch('/drafts/save', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            'Accept': 'application/json',
           },
-          credentials: 'same-origin',
           body: JSON.stringify({
             to: replyState.to,
             cc: replyState.cc,
@@ -107,6 +105,8 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
 
         if (response.ok) {
           toast.success('Draft saved');
+        } else {
+          throw new Error('Failed to save draft');
         }
       } catch (error) {
         console.error('Failed to save draft:', error);
