@@ -16,11 +16,13 @@ import {
   Italic,
   Underline,
   Link,
-  ImageIcon
+  ImageIcon,
+  Sparkles
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, authenticatedFetch } from "@/lib/utils";
 import { EmailMessage } from "@/types/inbox";
 import { useInbox } from "@/contexts/inbox-context";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -59,6 +61,7 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
     subject: "",
     body: ""
   });
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   const handleReply = useCallback((type: "reply" | "replyAll" | "forward") => {
     let defaultTo = "";
@@ -115,6 +118,62 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
     // Reset reply state
     handleCancelReply();
   }, [replyState, email, enterComposeMode, handleCancelReply]);
+
+  const handleGenerateAI = async () => {
+    if (!email || !email.id) {
+      toast.error("No email to respond to");
+      return;
+    }
+
+    setIsGeneratingAI(true);
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/emails/${email.id}/generate-response`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            tone: "professional",
+            style: "conversational",
+            include_signature: true,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Handle the response - check for different possible response structures
+      let aiContent = "";
+      if (data?.data?.draft?.ai_generated_content) {
+        aiContent = data.data.draft.ai_generated_content;
+      } else if (data?.response) {
+        aiContent = data.response;
+      } else if (data?.ai_generated_content) {
+        aiContent = data.ai_generated_content;
+      }
+
+      if (aiContent) {
+        setReplyState(prev => ({ ...prev, body: aiContent }));
+        toast.success("AI response generated successfully");
+      } else {
+        console.error("Unexpected response format:", data);
+        toast.error("Could not generate response - unexpected format");
+      }
+    } catch (error) {
+      console.error("Error generating AI response:", error);
+      toast.error("Failed to generate AI response. Please try again.");
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
 
   const getInitials = (name: string) => {
     return name
@@ -350,13 +409,29 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
               </div>
 
               {/* Reply Body */}
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <Textarea
                   placeholder="Type your message..."
                   value={replyState.body}
                   onChange={(e) => setReplyState(prev => ({ ...prev, body: e.target.value }))}
                   className="min-h-[120px] resize-none"
                 />
+                {/* Generate with AI button - show only when body is empty */}
+                {!replyState.body.trim() && (
+                  <div className="absolute bottom-2 left-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateAI}
+                      disabled={isGeneratingAI}
+                      className="gap-2"
+                      type="button"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {isGeneratingAI ? "Generating..." : "Generate with AI"}
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Reply Actions */}

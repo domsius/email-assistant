@@ -92,6 +92,7 @@ export function ComposePanel({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [bodyHasContent, setBodyHasContent] = useState(!!composeData.body);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Determine the default from account
   const getDefaultFromAccount = () => {
@@ -520,6 +521,7 @@ export function ComposePanel({
     exitComposeMode();
   };
 
+
   const handleGenerateAI = async () => {
     if (!originalEmail) {
       toast.error("No email to reply to");
@@ -566,6 +568,7 @@ export function ComposePanel({
       if (aiContent && bodyRef.current) {
         // Set the AI generated content directly on the textarea
         bodyRef.current.value = aiContent;
+        setBodyHasContent(true);
         toast.success("AI response generated successfully");
       } else {
         console.error("Unexpected response format:", data);
@@ -890,12 +893,32 @@ export function ComposePanel({
                 />
               </div>
             ) : (
-              <textarea
-                ref={bodyRef}
-                placeholder="Write your message..."
-                defaultValue={composeData.body || ""}
-                className="w-full h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0 outline-none"
-              />
+              <div className="relative h-full">
+                <textarea
+                  ref={bodyRef}
+                  placeholder="Write your message..."
+                  defaultValue={composeData.body || ""}
+                  onChange={(e) => setBodyHasContent(e.target.value.trim().length > 0)}
+                  className="w-full h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0 outline-none"
+                />
+                {/* Generate with AI button - show only when replying and body is empty */}
+                {(composeData.action === "reply" || composeData.action === "replyAll") && 
+                 originalEmail && !bodyHasContent && (
+                  <div className="absolute bottom-2 left-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateAI}
+                      disabled={isGeneratingAI}
+                      className="gap-2"
+                      type="button"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {isGeneratingAI ? "Generating..." : "Generate with AI"}
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
