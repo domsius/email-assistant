@@ -45,6 +45,9 @@ export const EmailToolbar = React.memo(function EmailToolbar() {
     handlePermanentDelete,
     handleSync,
   } = useInbox();
+  
+  const hasSelectedEmails = selectedEmails.length > 0;
+  
   return (
     <div className="flex items-center justify-between px-4 py-2">
       <div className="flex items-center gap-2">
@@ -61,7 +64,9 @@ export const EmailToolbar = React.memo(function EmailToolbar() {
           <TooltipContent>Select all</TooltipContent>
         </Tooltip>
 
-        {activeFolder === "archive" ? (
+        {hasSelectedEmails && (
+          <>
+            {activeFolder === "archive" ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -191,8 +196,10 @@ export const EmailToolbar = React.memo(function EmailToolbar() {
             )}
           </>
         )}
-
-        <Separator orientation="vertical" className="mx-1 h-6" />
+            
+            <Separator orientation="vertical" className="mx-1 h-6" />
+          </>
+        )}
 
         <Tooltip>
           <TooltipTrigger asChild>

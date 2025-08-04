@@ -516,7 +516,19 @@ export function ComposePanel({
     );
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
+    // Save draft before closing if there's content
+    const hasContent = 
+      toRef.current?.value?.trim() || 
+      ccRef.current?.value?.trim() || 
+      bccRef.current?.value?.trim() || 
+      subjectRef.current?.value?.trim() || 
+      bodyRef.current?.value?.trim();
+
+    if (hasContent && !isSending) {
+      await saveDraft();
+    }
+    
     // Always exit compose mode when cancel is clicked
     exitComposeMode();
   };
@@ -1096,8 +1108,9 @@ export function ComposePanel({
                 size="sm" 
                 onClick={handleCancel}
                 className="text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                disabled={isSavingDraft || isSending}
               >
-                Cancel
+                {isSavingDraft ? 'Saving...' : 'Cancel'}
               </Button>
               <Button 
                 size="sm" 

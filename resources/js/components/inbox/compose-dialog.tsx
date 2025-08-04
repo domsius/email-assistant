@@ -17,12 +17,17 @@ interface ComposeDialogProps {
 export function ComposeDialog({ composeData, originalEmail, draftId }: ComposeDialogProps) {
   const { exitComposeMode, isComposeMinimized, setComposeMinimized } = useInbox();
   const [size] = useState({ width: 540, height: 640 });
+  const composePanelRef = React.useRef<any>(null);
 
   const handleMinimize = useCallback(() => {
     setComposeMinimized(!isComposeMinimized);
   }, [isComposeMinimized, setComposeMinimized]);
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
+    // Trigger save draft in ComposePanel if it exists
+    if (composePanelRef.current?.handleSaveDraft) {
+      await composePanelRef.current.handleSaveDraft();
+    }
     exitComposeMode();
   }, [exitComposeMode]);
 
@@ -178,10 +183,12 @@ export function ComposeDialog({ composeData, originalEmail, draftId }: ComposeDi
         {/* Content */}
         <CardContent className="p-0 flex-1 overflow-hidden">
           <ComposePanel
+              ref={composePanelRef}
               composeData={composeData}
               originalEmail={originalEmail}
               draftId={draftId}
               isInDialog={true}
+              onClose={handleClose}
             />
         </CardContent>
       </Card>

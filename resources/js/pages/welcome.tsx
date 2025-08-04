@@ -24,9 +24,87 @@ import {
   MessageSquare,
   Zap,
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function Welcome() {
   const { auth } = usePage<SharedData>().props;
+  const [isPasswordProtected, setIsPasswordProtected] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    // Only enable password protection in production
+    if (import.meta.env.PROD) {
+      // Check if already authenticated in this session
+      const authStatus = sessionStorage.getItem("homepage_auth");
+      if (authStatus === "authenticated") {
+        setIsAuthenticated(true);
+      } else {
+        setIsPasswordProtected(true);
+      }
+    }
+  }, []);
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === "moneymoney") {
+      setIsAuthenticated(true);
+      setIsPasswordProtected(false);
+      sessionStorage.setItem("homepage_auth", "authenticated");
+      setError("");
+    } else {
+      setError("Incorrect password");
+      setPassword("");
+    }
+  };
+
+  // Show password dialog if in production and not authenticated
+  if (isPasswordProtected && !isAuthenticated) {
+    return (
+      <>
+        <Head title="AI-Powered Email Management for Modern Teams" />
+        <Dialog open={true}>
+          <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+            <DialogHeader>
+              <DialogTitle>Password Required</DialogTitle>
+              <DialogDescription>
+                Please enter the password to access this page.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  autoFocus
+                />
+                {error && (
+                  <p className="text-sm text-red-500">{error}</p>
+                )}
+              </div>
+              <Button type="submit" className="w-full">
+                Submit
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
 
   return (
     <>

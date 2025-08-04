@@ -53,10 +53,10 @@ function EmailTableHeader({
           />
         </TableHead>
         <TableHead className="w-12"></TableHead>
-        <TableHead className="w-32">Sender</TableHead>
-        <TableHead className="flex-1">Subject</TableHead>
+        <TableHead className="w-48">Sender</TableHead>
+        <TableHead>Subject</TableHead>
         <TableHead className="w-12"></TableHead>
-        <TableHead className="w-32 text-right">Date</TableHead>
+        <TableHead className="w-24 text-right">Date</TableHead>
       </TableRow>
     </TableHeader>
   );
@@ -131,33 +131,33 @@ function EmailTableRow({
         </Button>
       </TableCell>
       
-      <TableCell className="w-32">
-        <div className="flex items-center gap-2">
+      <TableCell className="w-48">
+        <div className="flex items-center gap-2 overflow-hidden">
           <span className={cn(
-            "truncate",
+            "truncate block",
             !email.isRead && !email.isDraft && "font-semibold"
           )}>
             {email.isDraft ? "Draft" : email.sender}
           </span>
           {email.isDraft && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="secondary" className="text-xs flex-shrink-0">
               Draft
             </Badge>
           )}
         </div>
       </TableCell>
       
-      <TableCell className="flex-1">
-        <div className="flex items-center gap-2">
+      <TableCell>
+        <div className="flex items-start gap-1 overflow-hidden">
           <span className={cn(
-            "truncate",
+            "truncate inline-block",
             !email.isRead && !email.isDraft && "font-semibold"
           )}>
             {email.subject || "(No Subject)"}
           </span>
           {email.snippet && (
-            <span className="text-muted-foreground text-sm">
-              - {truncateText(email.snippet, 80)}
+            <span className="text-muted-foreground text-sm truncate inline-block flex-1">
+              - {email.snippet}
             </span>
           )}
         </div>
@@ -169,7 +169,7 @@ function EmailTableRow({
         )}
       </TableCell>
       
-      <TableCell className="w-32 text-right text-sm text-muted-foreground">
+      <TableCell className="w-24 text-right text-sm text-muted-foreground">
         {formatDate(email.receivedAt || email.date || new Date().toISOString())}
       </TableCell>
     </TableRow>
@@ -290,8 +290,8 @@ export function GmailEmailTable({
         </div>
       )}
       
-      <div className="flex-1 overflow-auto">
-        <Table>
+      <div className="flex-1 overflow-y-auto">
+        <Table className="table-fixed w-full">
           {!isNested && (
             <EmailTableHeader
               onSelectAll={handleSelectAll}
