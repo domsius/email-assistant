@@ -189,6 +189,7 @@ export function GmailEmailTable({
     toggleEmailSelection,
     setSelectedEmails,
     handleToggleStar,
+    activeFolder,
   } = useInbox();
 
   const handleSelectAll = useCallback((checked: boolean) => {
@@ -292,7 +293,7 @@ export function GmailEmailTable({
       
       <div className="flex-1 overflow-y-auto">
         <Table className="table-fixed w-full">
-          {!isNested && (
+          {!isNested && activeFolder === 'inbox' && (
             <EmailTableHeader
               onSelectAll={handleSelectAll}
               hasSelectedEmails={hasSelectedEmails}
