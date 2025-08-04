@@ -3,11 +3,8 @@ import axios from "axios";
 import { toast } from "sonner";
 import { router } from "@inertiajs/react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardHeader } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -60,6 +57,7 @@ interface ComposePanelProps {
   };
   draftId?: number | null;
   isInDialog?: boolean;
+  onClose?: () => void;
 }
 
 interface Attachment {
@@ -72,7 +70,7 @@ interface Attachment {
   error?: string;
 }
 
-export function ComposePanel({
+export const ComposePanel = React.memo(function ComposePanel({
   composeData,
   originalEmail,
   draftId: initialDraftId,
@@ -92,6 +90,21 @@ export function ComposePanel({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  
+  // Focus on the appropriate field when component mounts
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!formData.to && composeData.action !== "forward") {
+        document.getElementById("compose-to")?.focus();
+      } else if (!formData.subject) {
+        document.getElementById("compose-subject")?.focus();
+      } else {
+        bodyRef.current?.focus();
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []); // Only run on mount
   const [bodyHasContent, setBodyHasContent] = useState(!!composeData.body);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Determine the default from account
@@ -119,11 +132,7 @@ export function ComposePanel({
   };
   
   const [fromAccount, setFromAccount] = useState<string>(getDefaultFromAccount());
-  // Using refs for uncontrolled components to test if this fixes the input issue
-  const toRef = useRef<HTMLInputElement>(null);
-  const ccRef = useRef<HTMLInputElement>(null);
-  const bccRef = useRef<HTMLInputElement>(null);
-  const subjectRef = useRef<HTMLInputElement>(null);
+  // Remove refs - we'll use controlled components instead
   
   const [formData, setFormData] = useState({
     to: composeData.to || "",
@@ -143,10 +152,6 @@ export function ComposePanel({
     setDraftSaveStatus(null); // Clear status when user makes changes
   }, []);
   
-  // Debug effect
-  useEffect(() => {
-    console.log('Form data updated:', formData);
-  }, [formData]);
 
   // Temporarily disabled auto-focus to debug input issue
   // useEffect(() => {
@@ -168,12 +173,12 @@ export function ComposePanel({
   const saveDraft = useCallback(async () => {
     if (isSavingDraft) return;
 
-    // Get values from refs
-    const toValue = toRef.current?.value || "";
-    const ccValue = ccRef.current?.value || "";
-    const bccValue = bccRef.current?.value || "";
-    const subjectValue = subjectRef.current?.value || "";
-    const bodyValue = bodyRef.current?.value || "";
+    // Get values from state
+    const toValue = formData.to;
+    const ccValue = formData.cc;
+    const bccValue = formData.bcc;
+    const subjectValue = formData.subject;
+    const bodyValue = formData.body;
 
     // Get the account to use for saving
     let accountToUse: number | null = null;
@@ -256,6 +261,7 @@ export function ComposePanel({
     isSavingDraft,
     fromAccount,
     emailAccounts,
+    formData,
   ]);
 
   // Debounced auto-save - temporarily disabled while testing uncontrolled inputs
@@ -301,7 +307,7 @@ export function ComposePanel({
 
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const currentValue = textarea.value;
+      const currentValue = formData.body;
       const selectedText = currentValue.substring(start, end);
 
       if (selectedText) {
@@ -323,8 +329,8 @@ export function ComposePanel({
           formattedText +
           currentValue.substring(end);
         
-        // Update the textarea value directly
-        textarea.value = newBody;
+        // Update the state
+        handleFormChange("body", newBody);
 
         // Restore cursor position after the formatted text
         setTimeout(() => {
@@ -356,8 +362,8 @@ export function ComposePanel({
           tags +
           currentValue.substring(start);
         
-        // Update the textarea value directly
-        textarea.value = newBody;
+        // Update the state
+        handleFormChange("body", newBody);
 
         // Place cursor inside the tags
         setTimeout(() => {
@@ -367,7 +373,7 @@ export function ComposePanel({
         }, 0);
       }
     },
-    [],
+    [formData.body, handleFormChange],
   );
 
   // Temporarily disabled keyboard shortcuts to debug input issue
@@ -397,12 +403,12 @@ export function ComposePanel({
   // }, [formData.body, handleFormat]);
 
   const handleSend = async () => {
-    // Get values from refs
-    const toValue = toRef.current?.value || "";
-    const ccValue = ccRef.current?.value || "";
-    const bccValue = bccRef.current?.value || "";
-    const subjectValue = subjectRef.current?.value || "";
-    const bodyValue = bodyRef.current?.value || "";
+    // Get values from state
+    const toValue = formData.to;
+    const ccValue = formData.cc;
+    const bccValue = formData.bcc;
+    const subjectValue = formData.subject;
+    const bodyValue = formData.body;
 
     if (!toValue && !ccValue && !bccValue) {
       toast.error("Please add at least one recipient");
@@ -519,11 +525,11 @@ export function ComposePanel({
   const handleCancel = async () => {
     // Save draft before closing if there's content
     const hasContent = 
-      toRef.current?.value?.trim() || 
-      ccRef.current?.value?.trim() || 
-      bccRef.current?.value?.trim() || 
-      subjectRef.current?.value?.trim() || 
-      bodyRef.current?.value?.trim();
+      formData.to.trim() || 
+      formData.cc.trim() || 
+      formData.bcc.trim() || 
+      formData.subject.trim() || 
+      formData.body.trim();
 
     if (hasContent && !isSending) {
       await saveDraft();
@@ -577,9 +583,9 @@ export function ComposePanel({
         aiContent = data.ai_generated_content;
       }
 
-      if (aiContent && bodyRef.current) {
-        // Set the AI generated content directly on the textarea
-        bodyRef.current.value = aiContent;
+      if (aiContent) {
+        // Set the AI generated content through state
+        handleFormChange("body", aiContent);
         setBodyHasContent(true);
         toast.success("AI response generated successfully");
       } else {
@@ -729,8 +735,8 @@ export function ComposePanel({
     return null;
   };
 
-  // Content component that can be used with or without the Card wrapper
-  const ComposeContent = () => (
+  // Render the content directly based on isInDialog
+  const content = (
     <div className={`flex flex-col ${isInDialog ? 'h-full' : ''}`}>
       {!isInDialog && (
         <CardHeader className="border-b px-6 py-4">
@@ -806,12 +812,13 @@ export function ComposePanel({
                 To
               </Label>
               <input
-                ref={toRef}
                 id="compose-to"
                 type="text"
                 placeholder="Recipients"
-                defaultValue={composeData.to || ""}
+                value={formData.to}
+                onChange={(e) => handleFormChange("to", e.target.value)}
                 className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3 h-9 outline-none"
+                autoComplete="off"
               />
               <div className="flex items-center gap-1">
                 <Button
@@ -843,11 +850,11 @@ export function ComposePanel({
                   Cc
                 </Label>
                 <input
-                  ref={ccRef}
                   id="compose-cc"
                   type="text"
                   placeholder="Cc Recipients"
-                  defaultValue={composeData.cc || ""}
+                  value={formData.cc}
+                  onChange={(e) => handleFormChange("cc", e.target.value)}
                   className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3 h-9 outline-none"
                 />
               </div>
@@ -863,11 +870,11 @@ export function ComposePanel({
                   Bcc
                 </Label>
                 <input
-                  ref={bccRef}
                   id="compose-bcc"
                   type="text"
                   placeholder="Bcc Recipients"
-                  defaultValue={composeData.bcc || ""}
+                  value={formData.bcc}
+                  onChange={(e) => handleFormChange("bcc", e.target.value)}
                   className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3 h-9 outline-none"
                 />
               </div>
@@ -882,11 +889,11 @@ export function ComposePanel({
                 Subject
               </Label>
               <input
-                ref={subjectRef}
                 id="compose-subject"
                 type="text"
                 placeholder="Subject"
-                defaultValue={composeData.subject || ""}
+                value={formData.subject}
+                onChange={(e) => handleFormChange("subject", e.target.value)}
                 className="flex-1 border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 px-3 h-9 outline-none"
               />
             </div>
@@ -901,7 +908,7 @@ export function ComposePanel({
                 </div>
                 <div
                   className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: bodyRef.current?.value || "" }}
+                  dangerouslySetInnerHTML={{ __html: formData.body }}
                 />
               </div>
             ) : (
@@ -909,8 +916,11 @@ export function ComposePanel({
                 <textarea
                   ref={bodyRef}
                   placeholder="Write your message..."
-                  defaultValue={composeData.body || ""}
-                  onChange={(e) => setBodyHasContent(e.target.value.trim().length > 0)}
+                  value={formData.body}
+                  onChange={(e) => {
+                    handleFormChange("body", e.target.value);
+                    setBodyHasContent(e.target.value.trim().length > 0);
+                  }}
                   className="w-full h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0 outline-none"
                 />
                 {/* Generate with AI button - show only when replying and body is empty */}
@@ -1132,15 +1142,15 @@ export function ComposePanel({
 
   if (isInDialog) {
     // When used in dialog, return content without Card wrapper
-    return <ComposeContent />;
+    return content;
   }
 
   // When used standalone, return with Card wrapper
   return (
     <div className="flex flex-col h-full">
       <Card className="flex-1 flex flex-col">
-        <ComposeContent />
+        {content}
       </Card>
     </div>
   );
-}
+});
