@@ -567,10 +567,23 @@ export function InboxProvider({
   }, []);
 
   const enterComposeMode = useCallback((data: ComposeData) => {
+    // Ensure we always have valid compose data
+    const validComposeData = {
+      to: data.to || "",
+      cc: data.cc || "",
+      bcc: data.bcc || "",
+      subject: data.subject || "",
+      body: data.body || "",
+      action: data.action || "new",
+      inReplyTo: data.inReplyTo,
+      references: data.references,
+      originalEmail: data.originalEmail,
+    };
+    
     setState((prev) => ({
       ...prev,
       isComposing: true,
-      composeData: data,
+      composeData: validComposeData as ComposeData,
     }));
   }, []);
 

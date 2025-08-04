@@ -107,15 +107,11 @@ export function InboxContent({ pagination }: InboxContentProps) {
             email={selectedEmailForDetail}
             onBackToList={handleBackToList}
           />
-          {isComposing && (
+          {isComposing && composeData && (
             <ComposeDialog 
-              composeData={composeData || {
-                to: "",
-                subject: "",
-                body: "",
-                action: "new"
-              }} 
-              originalEmail={composeData?.originalEmail}
+              key="compose-dialog"
+              composeData={composeData} 
+              originalEmail={composeData.originalEmail}
             />
           )}
         </div>
@@ -174,13 +170,11 @@ export function InboxContent({ pagination }: InboxContentProps) {
           )}
         </Tabs>
 
-        {isComposing && (
-          <ComposeDialog composeData={composeData || {
-            to: "",
-            subject: "",
-            body: "",
-            action: "new"
-          }} />
+        {isComposing && composeData && (
+          <ComposeDialog 
+            key="compose-dialog"
+            composeData={composeData} 
+          />
         )}
       </div>
     </TooltipProvider>

@@ -126,8 +126,7 @@ export function ComposeDialog({ composeData, originalEmail, draftId }: ComposeDi
         className="bg-card border border-border shadow-2xl flex flex-col rounded-lg overflow-hidden py-0"
         style={{ 
           width: size.width,
-          height: size.height,
-          pointerEvents: 'auto'
+          height: size.height
         }}
       >
         {/* Header */}
