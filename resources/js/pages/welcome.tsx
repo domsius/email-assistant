@@ -121,26 +121,26 @@ export default function Welcome() {
         <header className="sticky top-0 z-50 w-full border-b border-[#19140035] bg-[#FDFDFC]/80 backdrop-blur dark:border-[#3E3E3A] dark:bg-[#0a0a0a]/80">
           <div className="container mx-auto flex h-16 items-center justify-between px-4 lg:px-8">
             <div className="flex items-center gap-8">
-              <Link href="/" className="flex items-center gap-2">
+              <Link href="/" className="flex items-center gap-2 cursor-pointer">
                 <Mail className="h-6 w-6" />
                 <span className="text-xl font-semibold">EmailAI</span>
               </Link>
               <nav className="hidden gap-6 text-sm lg:flex">
                 <a
                   href="#features"
-                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]"
+                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A] cursor-pointer"
                 >
                   Features
                 </a>
                 <a
                   href="#how-it-works"
-                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]"
+                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A] cursor-pointer"
                 >
                   How it Works
                 </a>
                 <a
                   href="#pricing"
-                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A]"
+                  className="hover:text-[#706f6c] dark:hover:text-[#A1A09A] cursor-pointer"
                 >
                   Pricing
                 </a>
@@ -480,7 +480,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#features"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       Features
                     </a>
@@ -488,7 +488,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#pricing"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       Pricing
                     </a>
@@ -496,7 +496,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       Security
                     </a>
@@ -510,7 +510,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       About
                     </a>
@@ -518,7 +518,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       Blog
                     </a>
@@ -526,7 +526,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       Careers
                     </a>
@@ -540,7 +540,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       Privacy Policy
                     </a>
@@ -548,7 +548,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       Terms of Service
                     </a>
@@ -556,7 +556,7 @@ export default function Welcome() {
                   <li>
                     <a
                       href="#"
-                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]"
+                      className="text-[#706f6c] hover:text-[#1b1b18] dark:text-[#A1A09A] dark:hover:text-[#EDEDEC] cursor-pointer"
                     >
                       Cookie Policy
                     </a>
@@ -572,19 +572,19 @@ export default function Welcome() {
               <div className="flex gap-4">
                 <a
                   href="#"
-                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]"
+                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC] cursor-pointer"
                 >
                   Twitter
                 </a>
                 <a
                   href="#"
-                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]"
+                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC] cursor-pointer"
                 >
                   LinkedIn
                 </a>
                 <a
                   href="#"
-                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC]"
+                  className="hover:text-[#1b1b18] dark:hover:text-[#EDEDEC] cursor-pointer"
                 >
                   GitHub
                 </a>
