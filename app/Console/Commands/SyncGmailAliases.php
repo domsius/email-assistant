@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\EmailAccount;
 use App\Services\EmailProviderFactory;
+use App\Services\GmailService;
 use Illuminate\Console\Command;
 
 class SyncGmailAliases extends Command
@@ -13,82 +14,90 @@ class SyncGmailAliases extends Command
      *
      * @var string
      */
-    protected $signature = 'sync:gmail-aliases {accountId?}';
+    protected $signature = 'gmail:sync-aliases {accountId? : The email account ID to sync}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Sync Gmail send-as addresses (aliases) for Gmail accounts';
-
-    private EmailProviderFactory $providerFactory;
-
-    public function __construct(EmailProviderFactory $providerFactory)
-    {
-        parent::__construct();
-        $this->providerFactory = $providerFactory;
-    }
+    protected $description = 'Sync Gmail send-as addresses (aliases) for email accounts';
 
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(EmailProviderFactory $providerFactory): int
     {
         $accountId = $this->argument('accountId');
         
-        $query = EmailAccount::where('provider', 'gmail')
-            ->where('is_active', true);
-        
         if ($accountId) {
-            $query->where('id', $accountId);
+            $accounts = EmailAccount::where('id', $accountId)
+                ->where('provider', 'gmail')
+                ->where('is_active', true)
+                ->get();
+        } else {
+            $accounts = EmailAccount::where('provider', 'gmail')
+                ->where('is_active', true)
+                ->get();
         }
-        
-        $accounts = $query->get();
         
         if ($accounts->isEmpty()) {
             $this->error('No active Gmail accounts found.');
             return 1;
         }
         
-        $this->info("Found {$accounts->count()} Gmail account(s) to sync.");
+        $this->info("Syncing aliases for {$accounts->count()} Gmail account(s)...");
         
         foreach ($accounts as $account) {
-            $this->info("\nSyncing aliases for: {$account->email_address}");
+            $this->info("Processing account: {$account->email_address}");
             
             try {
-                $provider = $this->providerFactory->createProvider($account);
+                $provider = $providerFactory->createProvider($account);
                 
-                if (!$provider->isAuthenticated()) {
-                    $this->error("Account not authenticated: {$account->email_address}");
+                if (!$provider instanceof GmailService) {
+                    $this->error("Account {$account->email_address} is not a Gmail account.");
                     continue;
                 }
                 
-                if (method_exists($provider, 'syncSendAsAddresses')) {
-                    $provider->syncSendAsAddresses();
-                    
-                    // Reload the account with aliases
-                    $account->load('aliases');
-                    
-                    if ($account->aliases->count() > 0) {
-                        $this->info("Found {$account->aliases->count()} alias(es):");
-                        foreach ($account->aliases as $alias) {
-                            $this->line("  - {$alias->email_address}" . ($alias->name ? " ({$alias->name})" : ''));
+                // Sync the send-as addresses
+                $provider->syncSendAsAddresses();
+                
+                // Display the synced aliases
+                $aliases = $account->aliases()->get();
+                if ($aliases->count() > 0) {
+                    $this->info("  Found {$aliases->count()} alias(es):");
+                    foreach ($aliases as $alias) {
+                        $status = $alias->is_verified ? '✓' : '✗';
+                        $default = $alias->is_default ? ' (default)' : '';
+                        $this->info("    [{$status}] {$alias->email_address}{$default}");
+                        
+                        if ($alias->name) {
+                            $this->info("        Name: {$alias->name}");
                         }
-                    } else {
-                        $this->warn("No aliases found for this account.");
+                        
+                        // Check if it's a custom domain that might need special handling
+                        if (!str_ends_with($alias->email_address, '@gmail.com') && !$alias->is_default) {
+                            $settings = $alias->settings ?? [];
+                            $treatAsAlias = $settings['treat_as_alias'] ?? true;
+                            
+                            if ($treatAsAlias) {
+                                $this->warn("        ⚠️  Custom domain detected. For proper 'From' address handling:");
+                                $this->warn("        1. Go to Gmail Settings > Accounts > Send mail as");
+                                $this->warn("        2. Edit '{$alias->email_address}'");
+                                $this->warn("        3. Uncheck 'Treat as an alias'");
+                            }
+                        }
                     }
                 } else {
-                    $this->error("Provider does not support syncing aliases.");
+                    $this->info("  No aliases found.");
                 }
                 
             } catch (\Exception $e) {
-                $this->error("Failed to sync aliases: " . $e->getMessage());
-                $this->error("Stack trace: " . $e->getTraceAsString());
+                $this->error("  Failed to sync aliases: {$e->getMessage()}");
             }
         }
         
-        $this->info("\nSync completed!");
+        $this->info('Alias sync completed.');
         return 0;
     }
 }

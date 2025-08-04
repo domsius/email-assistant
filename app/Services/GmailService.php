@@ -495,6 +495,44 @@ class GmailService implements EmailProviderInterface
                 throw new Exception('Gmail account not authenticated');
             }
 
+            // For custom domain aliases, verify they are properly configured
+            if (!empty($emailData['fromAlias']) && !str_ends_with($emailData['fromAlias'], '@gmail.com')) {
+                try {
+                    // Verify the send-as address exists and is verified
+                    $sendAsAddresses = $this->gmail->users_settings_sendAs->listUsersSettingsSendAs('me');
+                    $aliasFound = false;
+                    $aliasVerified = false;
+                    
+                    foreach ($sendAsAddresses->getSendAs() as $sendAs) {
+                        if ($sendAs->getSendAsEmail() === $emailData['fromAlias']) {
+                            $aliasFound = true;
+                            $aliasVerified = ($sendAs->getVerificationStatus() === 'accepted');
+                            
+                            // Log the alias configuration for debugging
+                            Log::info('Gmail alias configuration', [
+                                'email' => $sendAs->getSendAsEmail(),
+                                'verified' => $aliasVerified,
+                                'treatAsAlias' => $sendAs->getTreatAsAlias(),
+                                'isDefault' => $sendAs->getIsDefault(),
+                            ]);
+                            break;
+                        }
+                    }
+                    
+                    if (!$aliasFound) {
+                        Log::warning("Send-as address not found in Gmail: {$emailData['fromAlias']}");
+                        throw new Exception("The email address {$emailData['fromAlias']} is not configured in Gmail. Please add it in Gmail Settings > Accounts > Send mail as.");
+                    }
+                    
+                    if (!$aliasVerified) {
+                        Log::warning("Send-as address not verified in Gmail: {$emailData['fromAlias']}");
+                        throw new Exception("The email address {$emailData['fromAlias']} is not verified in Gmail. Please verify it in Gmail Settings.");
+                    }
+                } catch (\Google\Service\Exception $e) {
+                    Log::error("Failed to check send-as configuration: " . $e->getMessage());
+                }
+            }
+
             // Create the email message
             $message = new \Google\Service\Gmail\Message;
 
@@ -505,12 +543,18 @@ class GmailService implements EmailProviderInterface
             // Send the email
             $result = $this->gmail->users_messages->send('me', $message);
 
+            Log::info('Email sent successfully', [
+                'messageId' => $result->getId(),
+                'threadId' => $result->getThreadId(),
+                'from' => $emailData['fromAlias'] ?? $this->emailAccount->email_address,
+            ]);
 
             return true;
         } catch (Exception $e) {
             Log::error('Gmail send email failed: '.$e->getMessage(), [
                 'to' => $emailData['to'] ?? 'unknown',
                 'subject' => $emailData['subject'] ?? 'unknown',
+                'fromAlias' => $emailData['fromAlias'] ?? null,
             ]);
 
             return false;

@@ -66,7 +66,7 @@ export function ComposeDialog({ composeData, originalEmail, draftId }: ComposeDi
           bottom: 0
         }}
       >
-        <Card className="border border-border shadow-lg hover:shadow-xl transition-shadow duration-200 rounded-lg">
+        <Card className="border border-border shadow-lg hover:shadow-xl transition-shadow duration-200 rounded-lg p-0">
           <div
             className="flex items-center justify-between px-4 py-3 select-none min-w-[320px] rounded-lg"
           >
