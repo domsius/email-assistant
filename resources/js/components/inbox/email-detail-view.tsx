@@ -14,7 +14,8 @@ import {
   Underline,
   Link,
   ImageIcon,
-  Sparkles
+  Sparkles,
+  Download
 } from "lucide-react";
 import { cn, authenticatedFetch } from "@/lib/utils";
 import { EmailMessage } from "@/types/inbox";
@@ -290,9 +291,11 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {email.attachments.map((attachment) => (
-                  <div 
+                  <a
                     key={attachment.id} 
-                    className="flex items-center gap-2 p-2 bg-background rounded border hover:bg-muted/50 cursor-pointer"
+                    href={`/emails/${email.id}/attachments/${attachment.id}/download`}
+                    download={attachment.filename}
+                    className="group flex items-center gap-2 p-2 bg-background rounded border hover:bg-muted/50 cursor-pointer transition-colors relative"
                   >
                     <div className="h-8 w-8 bg-primary/10 rounded flex items-center justify-center">
                       <span className="text-xs font-medium text-primary">
@@ -305,7 +308,8 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
                         {(attachment.size / 1024).toFixed(1)} KB
                       </div>
                     </div>
-                  </div>
+                    <Download className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </a>
                 ))}
               </div>
             </div>

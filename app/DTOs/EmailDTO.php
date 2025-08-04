@@ -158,7 +158,11 @@ class EmailDTO
 
             if ($attachment) {
                 // Replace with web route URL (uses session authentication)
-                $webUrl = "/emails/{$email->id}/inline/{$contentId}";
+                // Use route helper to ensure proper URL generation in all environments
+                $webUrl = route('emails.inline-image', [
+                    'email' => $email->id,
+                    'contentId' => $contentId
+                ], false);
 
                 return 'src="'.$webUrl.'"';
             }
