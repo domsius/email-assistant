@@ -561,6 +561,17 @@ class GmailService implements EmailProviderInterface
         }
     }
 
+    /**
+     * Encode a header value if it contains non-ASCII characters
+     */
+    private function encodeHeader(string $value): string
+    {
+        if (preg_match('/[^\x20-\x7E]/', $value)) {
+            return '=?UTF-8?B?' . base64_encode($value) . '?=';
+        }
+        return $value;
+    }
+
     private function buildEmailContent(array $emailData): string
     {
         $to = $emailData['to'];
@@ -588,7 +599,10 @@ class GmailService implements EmailProviderInterface
         }
 
         $headers = [];
-        $headers[] = "From: {$fromName} <{$fromEmail}>";
+        
+        // Encode the From name if it contains non-ASCII characters
+        $encodedFromName = $this->encodeHeader($fromName);
+        $headers[] = "From: {$encodedFromName} <{$fromEmail}>";
         $headers[] = "To: {$to}";
 
         // Add CC recipients if present
@@ -601,7 +615,8 @@ class GmailService implements EmailProviderInterface
             $headers[] = "Bcc: {$emailData['bcc']}";
         }
 
-        $headers[] = "Subject: {$subject}";
+        // Encode subject if it contains non-ASCII characters
+        $headers[] = "Subject: " . $this->encodeHeader($subject);
         $headers[] = 'MIME-Version: 1.0';
         $headers[] = 'Content-Type: text/plain; charset=utf-8';
         $headers[] = 'Content-Transfer-Encoding: quoted-printable';
