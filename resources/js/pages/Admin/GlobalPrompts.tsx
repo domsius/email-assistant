@@ -40,9 +40,10 @@ interface GlobalPrompt {
 interface Props {
   prompts: GlobalPrompt[];
   promptTypes: Record<string, string>;
+  isPlatformAdmin?: boolean;
 }
 
-export default function GlobalPrompts({ prompts, promptTypes }: Props) {
+export default function GlobalPrompts({ prompts, promptTypes, isPlatformAdmin = false }: Props) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<GlobalPrompt | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -173,10 +174,12 @@ export default function GlobalPrompts({ prompts, promptTypes }: Props) {
           <div>
             <h1 className="text-3xl font-bold">Global AI Prompts</h1>
             <p className="text-muted-foreground mt-1">
-              Configure company-wide AI response prompts that work alongside RAG
+              {isPlatformAdmin 
+                ? "Configure platform-wide AI response prompts that apply to all companies"
+                : "Configure company-wide AI response prompts that work alongside RAG"
+              }
             </p>
           </div>
-          test@example.com
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setIsCreateOpen(true)}>
@@ -188,7 +191,10 @@ export default function GlobalPrompts({ prompts, promptTypes }: Props) {
               <DialogHeader>
                 <DialogTitle>Create Global AI Prompt</DialogTitle>
                 <DialogDescription>
-                  Create a new global prompt that will be applied to all AI responses
+                  {isPlatformAdmin 
+                    ? "Create a new platform-wide prompt that will be applied to all companies"
+                    : "Create a new global prompt that will be applied to all AI responses in your company"
+                  }
                 </DialogDescription>
               </DialogHeader>
               
@@ -373,6 +379,9 @@ export default function GlobalPrompts({ prompts, promptTypes }: Props) {
                           {prompt.is_active ? "Active" : "Inactive"}
                         </Badge>
                         <Badge variant="outline">{promptTypes[prompt.prompt_type]}</Badge>
+                        {isPlatformAdmin && (
+                          <Badge variant="destructive">Platform-Wide</Badge>
+                        )}
                       </div>
                     </div>
                   </CardHeader>

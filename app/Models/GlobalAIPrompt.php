@@ -85,9 +85,22 @@ class GlobalAIPrompt extends Model
 
     /**
      * Get the active global prompt for a company by type
+     * First checks for platform-wide prompts (company_id = null), then company-specific
      */
     public static function getActivePromptForCompany(int $companyId, string $type = 'general')
     {
+        // First check for platform-wide prompt (admin global prompt)
+        $platformPrompt = self::whereNull('company_id')
+            ->where('prompt_type', $type)
+            ->where('is_active', true)
+            ->orderBy('created_at', 'desc')
+            ->first();
+            
+        if ($platformPrompt) {
+            return $platformPrompt;
+        }
+        
+        // Fall back to company-specific prompt
         return self::where('company_id', $companyId)
             ->where('prompt_type', $type)
             ->where('is_active', true)
@@ -101,5 +114,21 @@ class GlobalAIPrompt extends Model
     public static function getActiveRAGPromptForCompany(int $companyId)
     {
         return self::getActivePromptForCompany($companyId, 'rag_enhanced');
+    }
+    
+    /**
+     * Scope for platform-wide prompts
+     */
+    public function scopePlatformWide($query)
+    {
+        return $query->whereNull('company_id');
+    }
+    
+    /**
+     * Check if this is a platform-wide prompt
+     */
+    public function isPlatformWide(): bool
+    {
+        return $this->company_id === null;
     }
 }

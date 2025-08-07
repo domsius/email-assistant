@@ -56,10 +56,23 @@ class AIResponseService extends BaseService
                 // Create the system prompt with global admin prompts
                 $systemPrompt = $this->createSystemPrompt($emailMessage, $user);
 
-                // Apply global admin prompt if available
-                $globalPrompt = $this->getGlobalPrompt($emailMessage, ! empty($sources));
-                if ($globalPrompt) {
-                    $systemPrompt = $this->mergeWithGlobalPrompt($systemPrompt, $globalPrompt);
+                // Apply global admin prompts if available (both general and RAG)
+                $globalPrompts = $this->getGlobalPrompts($emailMessage, ! empty($sources));
+                if (!empty($globalPrompts)) {
+                    foreach ($globalPrompts as $globalPrompt) {
+                        Log::info('Global prompt found', [
+                            'prompt_id' => $globalPrompt->id,
+                            'prompt_type' => $globalPrompt->prompt_type,
+                            'prompt_content' => $globalPrompt->prompt_content,
+                            'is_active' => $globalPrompt->is_active,
+                        ]);
+                        $systemPrompt = $this->mergeWithGlobalPrompt($systemPrompt, $globalPrompt);
+                    }
+                } else {
+                    Log::info('No global prompts found for company', [
+                        'company_id' => $emailMessage->emailAccount->company_id,
+                        'has_rag_sources' => ! empty($sources),
+                    ]);
                 }
 
                 // Add RAG instructions to system prompt
@@ -410,22 +423,29 @@ class AIResponseService extends BaseService
     }
 
     /**
-     * Get global prompt if configured by admin
+     * Get global prompts if configured by admin
+     * Returns an array of prompts to apply (both general and RAG if available)
      */
-    private function getGlobalPrompt(EmailMessage $emailMessage, bool $hasRAGSources): ?GlobalAIPrompt
+    private function getGlobalPrompts(EmailMessage $emailMessage, bool $hasRAGSources): array
     {
         $companyId = $emailMessage->emailAccount->company_id;
+        $prompts = [];
         
-        // If RAG sources are available, prioritize RAG-enhanced prompt
+        // Always get general prompt if available
+        $generalPrompt = GlobalAIPrompt::getActivePromptForCompany($companyId, 'general');
+        if ($generalPrompt) {
+            $prompts[] = $generalPrompt;
+        }
+        
+        // If RAG sources are available, also get RAG-enhanced prompt
         if ($hasRAGSources) {
             $ragPrompt = GlobalAIPrompt::getActiveRAGPromptForCompany($companyId);
             if ($ragPrompt) {
-                return $ragPrompt;
+                $prompts[] = $ragPrompt;
             }
         }
         
-        // Fall back to general global prompt
-        return GlobalAIPrompt::getActivePromptForCompany($companyId);
+        return $prompts;
     }
 
     /**
@@ -435,13 +455,19 @@ class AIResponseService extends BaseService
     {
         $mergedPrompt = "";
         
-        // Add global prompt header
-        $mergedPrompt .= "=== COMPANY GLOBAL AI INSTRUCTIONS ===\n";
+        // Add global prompt header with type
+        $promptType = strtoupper(str_replace('_', ' ', $globalPrompt->prompt_type));
+        $mergedPrompt .= "=== {$promptType} GLOBAL INSTRUCTIONS (MANDATORY) ===\n";
         $mergedPrompt .= $globalPrompt->prompt_content . "\n";
-        $mergedPrompt .= "=== END OF GLOBAL INSTRUCTIONS ===\n\n";
+        $mergedPrompt .= "=== END OF {$promptType} INSTRUCTIONS ===\n\n";
         
         // Add the original system prompt
         $mergedPrompt .= $systemPrompt;
+        
+        Log::info('Merged prompt created', [
+            'global_prompt_content' => $globalPrompt->prompt_content,
+            'merged_prompt_preview' => substr($mergedPrompt, 0, 500),
+        ]);
         
         // Apply any custom settings from global prompt
         if ($globalPrompt->settings) {
