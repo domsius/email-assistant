@@ -88,6 +88,9 @@ class AIResponseService extends BaseService
 
                 $completion = $apiResult['result'];
                 $response = $completion->choices[0]->message->content;
+                
+                // Convert plain text response to HTML format
+                $response = $this->formatResponseAsHTML($response);
 
                 // Add citations if sources were used
                 if (! empty($sources)) {
@@ -507,5 +510,107 @@ class AIResponseService extends BaseService
                 'confidence' => 0.3,
             ];
         }
+    }
+    
+    /**
+     * Format AI response as HTML with proper formatting
+     */
+    private function formatResponseAsHTML(string $response): string
+    {
+        // If response already contains HTML tags, return as-is
+        if (preg_match('/<[^>]+>/', $response)) {
+            return $response;
+        }
+        
+        // Split response into paragraphs
+        $paragraphs = preg_split('/\n\s*\n/', trim($response));
+        
+        $html = '';
+        foreach ($paragraphs as $paragraph) {
+            $paragraph = trim($paragraph);
+            if (empty($paragraph)) {
+                continue;
+            }
+            
+            // Check if this is a list item
+            if (preg_match('/^[\-\*]\s+(.+)/', $paragraph, $matches)) {
+                // Convert to unordered list
+                $items = preg_split('/\n[\-\*]\s+/', $paragraph);
+                $html .= '<ul>';
+                foreach ($items as $item) {
+                    $item = trim(preg_replace('/^[\-\*]\s+/', '', $item));
+                    if (!empty($item)) {
+                        $html .= '<li>' . $this->formatInlineElements($item) . '</li>';
+                    }
+                }
+                $html .= '</ul>';
+            } elseif (preg_match('/^\d+\.\s+(.+)/', $paragraph, $matches)) {
+                // Convert to ordered list
+                $items = preg_split('/\n\d+\.\s+/', $paragraph);
+                $html .= '<ol>';
+                foreach ($items as $item) {
+                    $item = trim(preg_replace('/^\d+\.\s+/', '', $item));
+                    if (!empty($item)) {
+                        $html .= '<li>' . $this->formatInlineElements($item) . '</li>';
+                    }
+                }
+                $html .= '</ol>';
+            } else {
+                // Regular paragraph
+                // Convert line breaks within paragraphs to <br>
+                $lines = explode("\n", $paragraph);
+                $formattedLines = [];
+                
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if (!empty($line)) {
+                        $formattedLines[] = $this->formatInlineElements($line);
+                    }
+                }
+                
+                if (count($formattedLines) > 0) {
+                    $html .= '<p>' . implode('<br>', $formattedLines) . '</p>';
+                }
+            }
+        }
+        
+        return $html;
+    }
+    
+    /**
+     * Format inline elements like bold, italic, links
+     */
+    private function formatInlineElements(string $text): string
+    {
+        // Escape HTML special characters first
+        $text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+        
+        // Convert markdown-style formatting to HTML
+        // Bold: **text** or __text__
+        $text = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $text);
+        $text = preg_replace('/__(.+?)__/', '<strong>$1</strong>', $text);
+        
+        // Italic: *text* or _text_ (but not within words)
+        $text = preg_replace('/(?<!\w)\*(.+?)\*(?!\w)/', '<em>$1</em>', $text);
+        $text = preg_replace('/(?<!\w)_(.+?)_(?!\w)/', '<em>$1</em>', $text);
+        
+        // Links: [text](url)
+        $text = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>', $text);
+        
+        // Auto-link URLs
+        $text = preg_replace(
+            '/(https?:\/\/[^\s<]+)/',
+            '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
+            $text
+        );
+        
+        // Auto-link email addresses
+        $text = preg_replace(
+            '/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/',
+            '<a href="mailto:$1">$1</a>',
+            $text
+        );
+        
+        return $text;
     }
 }

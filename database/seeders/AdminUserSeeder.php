@@ -39,9 +39,9 @@ class AdminUserSeeder extends Seeder
         if (!$company) {
             $company = Company::create([
                 'name' => 'Admin Company',
-                'industry' => 'Technology',
-                'size' => '1-10',
-                'website' => 'https://example.com',
+                'email_limit' => 10000,
+                'subscription_plan' => 'enterprise',
+                'is_active' => true,
             ]);
             $this->command->info('Created new company for admin user.');
         }

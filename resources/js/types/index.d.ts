@@ -46,6 +46,7 @@ export interface User {
   name: string;
   email: string;
   avatar?: string;
+  role?: string; // Added role property for admin check
   email_verified_at: string | null;
   created_at: string;
   updated_at: string;

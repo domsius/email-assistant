@@ -167,13 +167,25 @@ export const ComposePanel = React.memo(function ComposePanel({
       SignatureService.fetchSignature(parseInt(accountId), fromAddress)
         .then(sanitizedSignature => {
           if (sanitizedSignature) {
-            console.log('Loaded sanitized signature:', sanitizedSignature.substring(0, 100) + '...');
+            console.log('=== SIGNATURE FETCH DEBUG ===');
+            console.log('Raw sanitized signature:', sanitizedSignature);
+            console.log('Signature length:', sanitizedSignature.length);
+            console.log('Contains email-signature class:', sanitizedSignature.includes('email-signature'));
             
-            setSignature(sanitizedSignature);
+            // Ensure signature is wrapped with email-signature class
+            let wrappedSignature = sanitizedSignature;
+            if (!sanitizedSignature.includes('email-signature')) {
+              wrappedSignature = `<div class="email-signature">${sanitizedSignature}</div>`;
+              console.log('Wrapped signature with email-signature class');
+            }
+            
+            setSignature(wrappedSignature);
+            console.log('Signature saved to state:', wrappedSignature);
             
             // If body is empty or only contains composeData.body, append signature
             if (!formData.body || formData.body === composeData.body) {
-              const newBody = SignatureService.insertSignature(formData.body, sanitizedSignature);
+              const newBody = SignatureService.insertSignature(formData.body, wrappedSignature);
+              console.log('Initial body with signature:', newBody);
               
               // Add a small delay to ensure the editor is ready
               setTimeout(() => {
@@ -550,8 +562,78 @@ export const ComposePanel = React.memo(function ComposePanel({
       }
 
       if (aiContent) {
-        // Set the AI generated content through state
-        handleFormChange("body", aiContent);
+        // Check if we have a signature and preserve it
+        const currentBody = formData.body || "";
+        
+        // Debug - show what we have before processing
+        console.warn('=== BEFORE AI GENERATION ===');
+        console.warn('Current body (last 500 chars):', currentBody.substring(Math.max(0, currentBody.length - 500)));
+        console.warn('Signature from state:', signature);
+        
+        // Look for signature patterns in the current body
+        // Try multiple patterns to find the signature
+        let extractedSignature = '';
+        
+        // Pattern 1: Content wrapped in email-signature class (need to match all content until end)
+        const wrappedSignaturePattern = /<div[^>]*class="[^"]*email-signature[^"]*"[^>]*>[\s\S]*$/i;
+        const wrappedMatch = currentBody.match(wrappedSignaturePattern);
+        
+        // Pattern 2: Lithuanian signature starting with "Pagarbiai"
+        const pagarbiaPattern = /(Pagarbiai,[\s\S]*)$/i;
+        const pagarbiaMatch = currentBody.match(pagarbiaPattern);
+        
+        // Pattern 3: After multiple line breaks (common signature position)
+        const afterBreaksPattern = /(<br\s*\/?>\s*<br\s*\/?>|<p>\s*<br\s*\/?>\s*<\/p>)([\s\S]+)$/i;
+        const afterBreaksMatch = currentBody.match(afterBreaksPattern);
+        
+        if (wrappedMatch) {
+          extractedSignature = wrappedMatch[0];
+          console.warn('Found wrapped signature:', extractedSignature.substring(0, 100));
+        } else if (pagarbiaMatch) {
+          extractedSignature = pagarbiaMatch[1];
+          console.warn('Found Pagarbiai signature:', extractedSignature.substring(0, 100));
+        } else if (afterBreaksMatch) {
+          // Check if what comes after breaks looks like a signature
+          const possibleSig = afterBreaksMatch[2];
+          if (possibleSig.includes('Pagarbiai') || possibleSig.includes('Regards') || 
+              possibleSig.includes('Best regards') || possibleSig.includes('Sincerely')) {
+            extractedSignature = possibleSig;
+            console.warn('Found signature after line breaks:', extractedSignature.substring(0, 100));
+          }
+        }
+        
+        // If no signature found in body, use the one from state
+        if (!extractedSignature && signature) {
+          extractedSignature = signature;
+          console.warn('Using signature from state');
+        }
+        
+        // Build the final content
+        let newBody = aiContent;
+        
+        // Make sure AI content doesn't already have the signature
+        if (extractedSignature) {
+          // Remove signature from AI content if it somehow got included
+          newBody = newBody.replace(wrappedSignaturePattern, '');
+          newBody = newBody.replace(pagarbiaPattern, '');
+          
+          // Append the signature
+          if (extractedSignature.includes('class="email-signature"')) {
+            // Already properly wrapped
+            newBody = newBody + '<br><br>' + extractedSignature;
+          } else {
+            // Wrap it properly
+            newBody = newBody + '<br><br><div class="email-signature">' + extractedSignature + '</div>';
+          }
+          
+          console.warn('=== AFTER AI GENERATION ===');
+          console.warn('Final body (last 500 chars):', newBody.substring(Math.max(0, newBody.length - 500)));
+        } else {
+          console.warn('WARNING: No signature found to preserve!');
+        }
+        
+        // Set the combined content (AI response + signature)
+        handleFormChange("body", newBody);
         setBodyHasContent(true);
         toast.success("AI response generated successfully");
       } else {

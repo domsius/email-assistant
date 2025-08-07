@@ -331,7 +331,28 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
       }
 
       if (aiContent) {
-        setReplyState(prev => ({ ...prev, body: aiContent }));
+        // Preserve existing signature if present
+        const currentBody = replyState.body || "";
+        
+        // Look for existing signature
+        const signaturePattern = /<div[^>]*class="[^"]*email-signature[^"]*"[^>]*>[\s\S]*$/i;
+        const signatureMatch = currentBody.match(signaturePattern);
+        
+        let finalBody = aiContent;
+        if (signatureMatch) {
+          // Found signature, append it to AI content
+          console.log("Preserving signature:", signatureMatch[0].substring(0, 100));
+          
+          // Remove any signature from AI content first (shouldn't have one, but just in case)
+          finalBody = aiContent.replace(signaturePattern, '');
+          
+          // Append the existing signature
+          finalBody = finalBody + '<br><br>' + signatureMatch[0];
+        } else {
+          console.log("No signature found in current body");
+        }
+        
+        setReplyState(prev => ({ ...prev, body: finalBody }));
         toast.success("AI response generated successfully");
       } else {
         console.error("Unexpected response format:", data);

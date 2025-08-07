@@ -113,19 +113,35 @@ export class SignatureService {
     // Validate inputs
     const content = existingContent || '';
     const trimmedContent = content.trim();
+    
+    // Wrap signature in email-signature div if not already wrapped
+    let wrappedSignature = signature;
+    if (!signature.includes('email-signature')) {
+      wrappedSignature = `<div class="email-signature">${signature}</div>`;
+    }
+    
+    console.log('=== INSERT SIGNATURE DEBUG ===');
+    console.log('Content:', content.substring(0, 100));
+    console.log('Signature to insert:', wrappedSignature.substring(0, 100));
 
     // Empty content - add signature with proper structure
-    if (!trimmedContent || trimmedContent === '<p></p>') {
-      return `<p><br><br></p>${signature}`;
+    if (!trimmedContent || trimmedContent === '<p></p>' || trimmedContent === '<p><br></p>') {
+      const result = `<p><br></p>${wrappedSignature}`;
+      console.log('Empty content result:', result.substring(0, 100));
+      return result;
     }
 
     // Content with closing </p> tag
     if (content.endsWith('</p>')) {
-      return content.slice(0, -4) + '<br><br>' + signature + '</p>';
+      const result = content.slice(0, -4) + '<br><br></p>' + wrappedSignature;
+      console.log('Paragraph content result:', result.substring(0, 100));
+      return result;
     }
 
     // Other content - just append
-    return content + '<br><br>' + signature;
+    const result = content + '<br><br>' + wrappedSignature;
+    console.log('Other content result:', result.substring(0, 100));
+    return result;
   }
 
   /**

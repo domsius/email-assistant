@@ -2,22 +2,9 @@ import Heading from "@/components/heading";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { type NavItem } from "@/types";
-import { Link } from "@inertiajs/react";
+import { type NavItem, type SharedData } from "@/types";
+import { Link, usePage } from "@inertiajs/react";
 import { type PropsWithChildren } from "react";
-
-const sidebarNavItems: NavItem[] = [
-  {
-    title: "Profile",
-    href: "/settings/profile",
-    icon: null,
-  },
-  {
-    title: "Password",
-    href: "/settings/password",
-    icon: null,
-  },
-];
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
   // When server-side rendering, we only render the layout on the client...
@@ -25,7 +12,31 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     return null;
   }
 
+  const { auth } = usePage<SharedData>().props;
   const currentPath = window.location.pathname;
+  
+  // Build sidebar items based on user role
+  const sidebarNavItems: NavItem[] = [
+    {
+      title: "Profile",
+      href: "/settings/profile",
+      icon: null,
+    },
+    {
+      title: "Password",
+      href: "/settings/password",
+      icon: null,
+    },
+  ];
+  
+  // Add admin-only menu items
+  if (auth?.user?.role === 'admin') {
+    sidebarNavItems.push({
+      title: "Global Prompts",
+      href: "/admin/global-prompts",
+      icon: null,
+    });
+  }
 
   return (
     <div className="px-4 py-6">
