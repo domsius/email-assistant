@@ -776,6 +776,49 @@ class GmailService implements EmailProviderInterface
     }
 
     /**
+     * Get signature for a specific email address (from address)
+     * 
+     * @param string $fromAddress The email address to get signature for
+     * @return string|null The signature HTML or null if not found
+     */
+    public function getSignature(string $fromAddress): ?string
+    {
+        try {
+            // First check if we have the signature in our database
+            $alias = $this->emailAccount->aliases()
+                ->where('email_address', $fromAddress)
+                ->first();
+            
+            if ($alias && isset($alias->settings['signature'])) {
+                return $alias->settings['signature'];
+            }
+            
+            // If not in database, fetch from Gmail API
+            $sendAsAddresses = $this->gmail->users_settings_sendAs->listUsersSettingsSendAs('me');
+            
+            foreach ($sendAsAddresses->getSendAs() as $sendAs) {
+                if ($sendAs->getSendAsEmail() === $fromAddress) {
+                    $signature = $sendAs->getSignature();
+                    
+                    // Update the database with the signature
+                    if ($alias) {
+                        $settings = $alias->settings;
+                        $settings['signature'] = $signature;
+                        $alias->update(['settings' => $settings]);
+                    }
+                    
+                    return $signature;
+                }
+            }
+            
+            return null;
+        } catch (Exception $e) {
+            Log::error("Failed to get signature for {$fromAddress}: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Fetch email IDs only (for batch processing)
      */
     public function fetchEmailIds(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array

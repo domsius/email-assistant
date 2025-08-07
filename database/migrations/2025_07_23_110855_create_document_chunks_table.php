@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('document_chunks', function (Blueprint $table) {
             $table->id();
             $table->foreignId('document_id')->constrained()->cascadeOnDelete();
-            $table->integer('chunk_number');
+            $table->integer('chunk_number')->default(0);
             $table->text('content');
             $table->text('embedding')->nullable(); // Store as JSON text
             $table->integer('start_position');

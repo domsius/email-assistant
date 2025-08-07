@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
-import { toast } from "sonner";
 import { router } from "@inertiajs/react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,26 +13,17 @@ import {
 } from "@/components/ui/select";
 import { authenticatedFetch, cn } from "@/lib/utils";
 import {
-  Send,
   X,
   Paperclip,
-  Bold,
-  Italic,
-  Underline,
-  Link,
-  Image,
-  Smile,
-  MoreHorizontal,
   Sparkles,
   Eye,
-  Pencil,
   FileIcon,
   Trash2,
-  Clock,
-  CheckCircle,
-  AlertCircle,
 } from "lucide-react";
 import { useInbox } from "@/contexts/inbox-context";
+import { EmailEditor } from "@/components/ui/email-editor";
+import { SignatureService } from "@/services/SignatureService";
+import { toast } from "sonner";
 
 interface ComposePanelProps {
   composeData: {
@@ -70,6 +60,7 @@ interface Attachment {
   error?: string;
 }
 
+
 export const ComposePanel = React.memo(function ComposePanel({
   composeData,
   originalEmail,
@@ -98,9 +89,8 @@ export const ComposePanel = React.memo(function ComposePanel({
         document.getElementById("compose-to")?.focus();
       } else if (!formData.subject) {
         document.getElementById("compose-subject")?.focus();
-      } else {
-        bodyRef.current?.focus();
       }
+      // Note: The rich text editor will handle its own focus
     }, 100);
     
     return () => clearTimeout(timer);
@@ -132,6 +122,7 @@ export const ComposePanel = React.memo(function ComposePanel({
   };
   
   const [fromAccount, setFromAccount] = useState<string>(getDefaultFromAccount());
+  const [signature, setSignature] = useState<string>("");
   // Remove refs - we'll use controlled components instead
   
   const [formData, setFormData] = useState({
@@ -142,7 +133,6 @@ export const ComposePanel = React.memo(function ComposePanel({
     body: composeData.body || "",
   });
 
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper function to handle form changes
@@ -151,6 +141,57 @@ export const ComposePanel = React.memo(function ComposePanel({
     setHasUnsavedChanges(true);
     setDraftSaveStatus(null); // Clear status when user makes changes
   }, []);
+  
+  // Fetch signature when from account changes
+  useEffect(() => {
+    console.log('Checking signature fetch:', { fromAccount, action: composeData.action });
+    
+    if (fromAccount && (composeData.action === "new" || composeData.action === "reply" || composeData.action === "replyAll")) {
+      // Extract account ID and from address
+      let accountId: string;
+      let fromAddress: string;
+      
+      if (fromAccount.includes(':')) {
+        const [id, aliasEmail] = fromAccount.split(':');
+        accountId = id;
+        fromAddress = aliasEmail;
+      } else {
+        // Find the account's main email
+        const account = emailAccounts.find(acc => acc.id.toString() === fromAccount);
+        if (!account) return;
+        accountId = fromAccount;
+        fromAddress = account.email;
+      }
+      
+      // Fetch signature using secure service
+      SignatureService.fetchSignature(parseInt(accountId), fromAddress)
+        .then(sanitizedSignature => {
+          if (sanitizedSignature) {
+            console.log('Loaded sanitized signature:', sanitizedSignature.substring(0, 100) + '...');
+            
+            setSignature(sanitizedSignature);
+            
+            // If body is empty or only contains composeData.body, append signature
+            if (!formData.body || formData.body === composeData.body) {
+              const newBody = SignatureService.insertSignature(formData.body, sanitizedSignature);
+              
+              // Add a small delay to ensure the editor is ready
+              setTimeout(() => {
+                handleFormChange("body", newBody);
+              }, 100);
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Failed to fetch signature:', error);
+          toast.error('Unable to load email signature');
+          
+          // Use fallback signature
+          const fallbackSignature = SignatureService.getDefaultSignature();
+          setSignature(fallbackSignature);
+        });
+    }
+  }, [fromAccount, composeData.action, emailAccounts]);
   
 
   // Temporarily disabled auto-focus to debug input issue
@@ -300,81 +341,6 @@ export const ComposePanel = React.memo(function ComposePanel({
   //   };
   // }, [formData, saveDraft, hasUnsavedChanges]);
 
-  const handleFormat = useCallback(
-    (format: "bold" | "italic" | "underline") => {
-      const textarea = bodyRef.current;
-      if (!textarea) return;
-
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const currentValue = formData.body;
-      const selectedText = currentValue.substring(start, end);
-
-      if (selectedText) {
-        let formattedText = "";
-        switch (format) {
-          case "bold":
-            formattedText = `<strong>${selectedText}</strong>`;
-            break;
-          case "italic":
-            formattedText = `<em>${selectedText}</em>`;
-            break;
-          case "underline":
-            formattedText = `<u>${selectedText}</u>`;
-            break;
-        }
-
-        const newBody =
-          currentValue.substring(0, start) +
-          formattedText +
-          currentValue.substring(end);
-        
-        // Update the state
-        handleFormChange("body", newBody);
-
-        // Restore cursor position after the formatted text
-        setTimeout(() => {
-          textarea.focus();
-          const newCursorPos = start + formattedText.length;
-          textarea.setSelectionRange(newCursorPos, newCursorPos);
-        }, 0);
-      } else {
-        // If no text is selected, insert formatting tags at cursor position
-        let tags = "";
-        let tagLength = 0;
-        switch (format) {
-          case "bold":
-            tags = "<strong></strong>";
-            tagLength = 8; // length of <strong>
-            break;
-          case "italic":
-            tags = "<em></em>";
-            tagLength = 4; // length of <em>
-            break;
-          case "underline":
-            tags = "<u></u>";
-            tagLength = 3; // length of <u>
-            break;
-        }
-
-        const newBody =
-          currentValue.substring(0, start) +
-          tags +
-          currentValue.substring(start);
-        
-        // Update the state
-        handleFormChange("body", newBody);
-
-        // Place cursor inside the tags
-        setTimeout(() => {
-          textarea.focus();
-          const cursorPos = start + tagLength;
-          textarea.setSelectionRange(cursorPos, cursorPos);
-        }, 0);
-      }
-    },
-    [formData.body, handleFormChange],
-  );
 
   // Temporarily disabled keyboard shortcuts to debug input issue
   // // Keyboard shortcuts for formatting
@@ -900,7 +866,7 @@ export const ComposePanel = React.memo(function ComposePanel({
           </div>
 
           {/* Body */}
-          <div className="flex-1 px-4 py-3 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {showPreview ? (
               <div className="min-h-[300px] h-full p-0">
                 <div className="mb-2 text-sm text-muted-foreground">
@@ -912,34 +878,17 @@ export const ComposePanel = React.memo(function ComposePanel({
                 />
               </div>
             ) : (
-              <div className="relative h-full">
-                <textarea
-                  ref={bodyRef}
-                  placeholder="Write your message..."
-                  value={formData.body}
-                  onChange={(e) => {
-                    handleFormChange("body", e.target.value);
-                    setBodyHasContent(e.target.value.trim().length > 0);
+              <div className="h-full flex flex-col">
+                <EmailEditor
+                  content={formData.body}
+                  onChange={(html) => {
+                    handleFormChange("body", html);
+                    setBodyHasContent(html.trim().length > 0 && html !== '<p></p>');
                   }}
-                  className="w-full h-full resize-none border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-0 p-0 outline-none"
+                  placeholder="Write your message..."
+                  className="flex-1"
+                  minHeight="300px"
                 />
-                {/* Generate with AI button - show only when replying and body is empty */}
-                {(composeData.action === "reply" || composeData.action === "replyAll") && 
-                 originalEmail && !bodyHasContent && (
-                  <div className="absolute bottom-2 left-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleGenerateAI}
-                      disabled={isGeneratingAI}
-                      className="gap-2"
-                      type="button"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      {isGeneratingAI ? "Generating..." : "Generate with AI"}
-                    </Button>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -1007,18 +956,19 @@ export const ComposePanel = React.memo(function ComposePanel({
 
           {/* Toolbar */}
           <div className="border-t bg-card">
-            {/* Formatting buttons row */}
-            <div className="flex items-center px-4 py-2 border-b border-border">
-              <div className="flex items-center gap-1">
+            {/* Action buttons row with attachment and preview */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+              <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
+                  className="h-8 px-3 gap-2 hover:bg-accent hover:text-accent-foreground"
                   title="Attach file"
                   onClick={() => fileInputRef.current?.click()}
                   type="button"
                 >
                   <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs">Attach</span>
                 </Button>
                 <input
                   ref={fileInputRef}
@@ -1032,66 +982,7 @@ export const ComposePanel = React.memo(function ComposePanel({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-                  title="Bold (Ctrl+B)"
-                  onClick={() => handleFormat("bold")}
-                  type="button"
-                >
-                  <Bold className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-                  title="Italic (Ctrl+I)"
-                  onClick={() => handleFormat("italic")}
-                  type="button"
-                >
-                  <Italic className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-                  title="Underline (Ctrl+U)"
-                  onClick={() => handleFormat("underline")}
-                  type="button"
-                >
-                  <Underline className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-                  title="Insert link"
-                  type="button"
-                >
-                  <Link className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-                  title="Insert image"
-                  type="button"
-                >
-                  <Image className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-                  title="Insert emoji"
-                  type="button"
-                >
-                  <Smile className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 gap-1 hover:bg-accent hover:text-accent-foreground"
+                  className="h-8 px-3 gap-2 hover:bg-accent hover:text-accent-foreground"
                   title="Toggle preview"
                   onClick={() => setShowPreview(!showPreview)}
                   type="button"
@@ -1099,20 +990,26 @@ export const ComposePanel = React.memo(function ComposePanel({
                   <Eye className="h-4 w-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">Preview</span>
                 </Button>
-                
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-                  title="More options"
-                >
-                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                </Button>
               </div>
             </div>
 
-            {/* Action buttons row */}
+            {/* Send buttons row */}
             <div className="flex items-center justify-end gap-2 px-4 py-3">
+              {/* Generate with AI button - show when replying */}
+              {(composeData.action === "reply" || composeData.action === "replyAll") && 
+               originalEmail && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateAI}
+                  disabled={isGeneratingAI}
+                  className="gap-2"
+                  type="button"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {isGeneratingAI ? "Generating..." : "Generate with AI"}
+                </Button>
+              )}
               <Button 
                 variant="ghost" 
                 size="sm" 

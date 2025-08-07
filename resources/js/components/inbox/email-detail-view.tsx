@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { router } from "@inertiajs/react";
 import { 
@@ -20,13 +20,14 @@ import {
 import { cn, authenticatedFetch } from "@/lib/utils";
 import { EmailMessage } from "@/types/inbox";
 import { useInbox } from "@/contexts/inbox-context";
+import { usePage } from "@inertiajs/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { EmailEditor } from "@/components/ui/email-editor";
+import { SignatureService } from "@/services/SignatureService";
+
 
 interface EmailDetailViewProps {
   email: EmailMessage;
@@ -44,6 +45,8 @@ interface ReplyState {
 
 export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
   const { handleToggleStar, enterComposeMode } = useInbox();
+  const { props } = usePage<any>();
+  const emailAccounts = props.emailAccounts || [];
   
   const [replyState, setReplyState] = useState<ReplyState>({
     isReplying: false,
@@ -54,6 +57,120 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
     body: ""
   });
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [replySignature, setReplySignature] = useState<string>("");
+  
+  // If this is a draft, open it in compose mode immediately
+  useEffect(() => {
+    if (email.isDraft) {
+      // Find the from address for the draft
+      let defaultFrom = "";
+      if (email.emailAccountId) {
+        const account = emailAccounts.find((acc: any) => 
+          acc.id === email.emailAccountId || acc.id === email.emailAccountId.toString()
+        );
+        if (account) {
+          defaultFrom = account.email;
+        }
+      }
+      
+      enterComposeMode({
+        to: email.to || email.recipients || "",
+        cc: email.cc || email.cc_recipients || "",
+        bcc: email.bcc || email.bcc_recipients || "",
+        subject: email.subject || "",
+        body: email.body_content || email.content || email.plainTextContent || "",
+        action: email.action || "draft",
+        draftId: email.draftId || email.id,
+        originalEmail: email.originalEmail,
+        defaultFrom: defaultFrom || email.from,
+      });
+      // Go back to list after entering compose mode
+      onBackToList();
+    }
+  }, [email.isDraft, emailAccounts]);
+  
+  // Fetch signature when starting a reply
+  useEffect(() => {
+    if (replyState.isReplying && replyState.replyType !== "forward" && emailAccounts.length > 0) {
+      // Get the email account that received this email
+      // First, try to find by email_account_id if available
+      let recipientAccount = null;
+      let fromAddress = "";
+      
+      // Check if email has an emailAccountId property
+      if (email.emailAccountId) {
+        recipientAccount = emailAccounts.find((acc: any) => 
+          acc.id === email.emailAccountId || acc.id === email.emailAccountId.toString()
+        );
+        if (recipientAccount) {
+          fromAddress = recipientAccount.email;
+          
+          // Check if the email was sent to an alias
+          if (recipientAccount.aliases && recipientAccount.aliases.length > 0 && email.to) {
+            const emailTo = email.to.toLowerCase();
+            const matchedAlias = recipientAccount.aliases.find((alias: any) =>
+              emailTo.includes(alias.email_address.toLowerCase())
+            );
+            if (matchedAlias) {
+              fromAddress = matchedAlias.email_address;
+            }
+          }
+        }
+      }
+      
+      // If not found, try to match by recipient email addresses
+      if (!recipientAccount) {
+        const emailTo = email.to?.toLowerCase() || "";
+        
+        for (const acc of emailAccounts) {
+          // Check main email
+          if (emailTo.includes(acc.email.toLowerCase())) {
+            recipientAccount = acc;
+            fromAddress = acc.email;
+            break;
+          }
+          
+          // Check aliases
+          if (acc.aliases && acc.aliases.length > 0) {
+            const matchedAlias = acc.aliases.find((alias: any) =>
+              emailTo.includes(alias.email_address.toLowerCase())
+            );
+            if (matchedAlias) {
+              recipientAccount = acc;
+              fromAddress = matchedAlias.email_address;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (recipientAccount && fromAddress) {
+        // Fetch signature using secure service
+        SignatureService.fetchSignature(recipientAccount.id, fromAddress)
+          .then(sanitizedSignature => {
+            if (sanitizedSignature && !replyState.body.includes(sanitizedSignature)) {
+              console.log('Loaded sanitized reply signature:', sanitizedSignature.substring(0, 100) + '...');
+              
+              setReplySignature(sanitizedSignature);
+              
+              const newBody = SignatureService.insertSignature(replyState.body, sanitizedSignature);
+              setReplyState(prev => ({
+                ...prev,
+                body: newBody
+              }));
+            }
+          })
+          .catch(error => {
+            console.error('Failed to fetch reply signature:', error);
+            toast.error('Unable to load email signature for reply');
+            
+            // Use fallback signature
+            const fallbackSignature = SignatureService.getDefaultSignature();
+            setReplySignature(fallbackSignature);
+          });
+      }
+    }
+  }, [replyState.isReplying, replyState.replyType, emailAccounts]);
 
   const handleReply = useCallback((type: "reply" | "replyAll" | "forward") => {
     let defaultTo = "";
@@ -84,38 +201,67 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
     });
   }, [email]);
 
-  const handleCancelReply = useCallback(async () => {
-    // Save as draft if there's content
-    if (replyState.body.trim() || replyState.subject.trim()) {
-      try {
-        const response = await authenticatedFetch('/drafts/save', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({
-            to: replyState.to,
-            cc: replyState.cc,
-            subject: replyState.subject,
-            body: replyState.body,
-            in_reply_to: email.id,
-            is_reply: replyState.replyType === 'reply' || replyState.replyType === 'replyAll',
-          }),
-        });
-
-        if (response.ok) {
-          toast.success('Draft saved');
-        } else {
-          throw new Error('Failed to save draft');
-        }
-      } catch (error) {
-        console.error('Failed to save draft:', error);
-        toast.error('Failed to save draft');
-      }
+  // Auto-save draft function
+  const saveDraft = useCallback(async () => {
+    if (!replyState.body.trim() && !replyState.subject.trim()) {
+      return;
     }
+
+    try {
+      // Get the account that received this email
+      let emailAccountId: number | null = null;
+      
+      if (email.emailAccountId) {
+        const recipientAccount = emailAccounts.find((acc: any) => 
+          acc.id === email.emailAccountId || acc.id === email.emailAccountId.toString()
+        );
+        if (recipientAccount) {
+          emailAccountId = recipientAccount.id;
+        }
+      }
+      
+      if (!emailAccountId && emailAccounts.length > 0) {
+        emailAccountId = emailAccounts[0].id;
+      }
+      
+      const response = await authenticatedFetch('/drafts/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          to: replyState.to,
+          cc: replyState.cc,
+          subject: replyState.subject,
+          body: replyState.body,
+          in_reply_to: email.id,
+          is_reply: replyState.replyType === 'reply' || replyState.replyType === 'replyAll',
+          emailAccountId: emailAccountId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save draft');
+      }
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+    }
+  }, [replyState, email.id, emailAccounts]);
+
+  // Auto-save draft when reply content changes
+  useEffect(() => {
+    if (!replyState.isReplying) return;
     
-    // Reset reply state
+    const timeoutId = setTimeout(() => {
+      saveDraft();
+    }, 2000); // Save after 2 seconds of inactivity
+    
+    return () => clearTimeout(timeoutId);
+  }, [replyState.body, replyState.subject, replyState.to, replyState.cc, replyState.isReplying, saveDraft]);
+
+  const handleCancelReply = useCallback(() => {
+    // Just reset reply state without saving
     setReplyState({
       isReplying: false,
       replyType: null,
@@ -124,7 +270,8 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
       subject: "",
       body: ""
     });
-  }, [replyState, email.id]);
+    setReplySignature("");
+  }, []);
 
   const handleSendReply = useCallback(() => {
     // Use the existing compose functionality
@@ -206,6 +353,11 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
       .toUpperCase()
       .slice(0, 2);
   };
+
+  // Don't render anything if this is a draft (it will open in compose mode)
+  if (email.isDraft) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -392,37 +544,21 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
                 </div>
               </div>
 
-              {/* Formatting Toolbar */}
-              <div className="flex items-center gap-1 mb-3 p-2 bg-background rounded border">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Bold className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Italic className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Underline className="h-4 w-4" />
-                </Button>
-                <Separator orientation="vertical" className="h-6" />
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Link className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <ImageIcon className="h-4 w-4" />
-                </Button>
+              {/* Reply Body */}
+              <div className="mb-4">
+                <EmailEditor
+                  content={replyState.body}
+                  onChange={(html) => setReplyState(prev => ({ ...prev, body: html }))}
+                  placeholder="Type your message..."
+                  minHeight="200px"
+                />
               </div>
 
-              {/* Reply Body */}
-              <div className="mb-4 relative">
-                <Textarea
-                  placeholder="Type your message..."
-                  value={replyState.body}
-                  onChange={(e) => setReplyState(prev => ({ ...prev, body: e.target.value }))}
-                  className="min-h-[120px] resize-none"
-                />
-                {/* Generate with AI button - show only when body is empty */}
-                {!replyState.body.trim() && (
-                  <div className="absolute bottom-2 left-2">
+              {/* Reply Actions */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {/* Generate with AI button */}
+                  {(
                     <Button
                       variant="outline"
                       size="sm"
@@ -434,19 +570,13 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
                       <Sparkles className="h-4 w-4" />
                       {isGeneratingAI ? "Generating..." : "Generate with AI"}
                     </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Reply Actions */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                  )}
                   <Button onClick={handleSendReply} className="gap-2">
                     <Send className="h-4 w-4" />
                     Send
                   </Button>
                   <Button variant="outline" onClick={handleCancelReply}>
-                    {replyState.body.trim() || replyState.subject.trim() ? 'Save as Draft' : 'Cancel'}
+                    Cancel
                   </Button>
                 </div>
                 

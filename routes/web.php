@@ -94,19 +94,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     });
 
-    Route::get('knowledge-base', function () {
-        return Inertia::render('knowledge-base', [
-            'documents' => [],
-            'stats' => [
-                'totalDocuments' => 0,
-                'processedDocuments' => 0,
-                'totalChunks' => 0,
-                'totalEmbeddings' => 0,
-                'storageUsed' => 0,
-                'storageLimit' => 1073741824,
-            ],
-        ]);
-    })->name('knowledge-base');
+    // Knowledge Base routes
+    Route::get('knowledge-base', [\App\Http\Controllers\KnowledgeBaseController::class, 'index'])->name('knowledge-base');
+    Route::post('knowledge-base/upload', [\App\Http\Controllers\KnowledgeBaseController::class, 'upload'])->name('knowledge-base.upload');
+    Route::delete('knowledge-base/{document}', [\App\Http\Controllers\KnowledgeBaseController::class, 'destroy'])->name('knowledge-base.destroy');
+    Route::post('knowledge-base/{document}/reprocess', [\App\Http\Controllers\KnowledgeBaseController::class, 'reprocess'])->name('knowledge-base.reprocess');
 
     // Email operations
     Route::post('/emails/sync', [\App\Http\Controllers\EmailOperationsController::class, 'sync'])
@@ -147,6 +139,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/drafts/{id}', [\App\Http\Controllers\ComposeController::class, 'getDraft'])->name('drafts.get');
     Route::delete('/drafts/{id}', [\App\Http\Controllers\ComposeController::class, 'deleteDraft'])->name('drafts.delete');
     Route::post('/emails/send', [\App\Http\Controllers\ComposeController::class, 'send'])->name('emails.send');
+});
+
+// Admin routes
+Route::middleware(['auth', 'verified', \App\Http\Middleware\IsAdmin::class])->prefix('admin')->group(function () {
+    Route::get('/global-prompts', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'index'])->name('admin.global-prompts');
+    Route::post('/global-prompts', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'store'])->name('admin.global-prompts.store');
+    Route::put('/global-prompts/{prompt}', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'update'])->name('admin.global-prompts.update');
+    Route::delete('/global-prompts/{prompt}', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'destroy'])->name('admin.global-prompts.destroy');
+    Route::post('/global-prompts/{prompt}/toggle-active', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'toggleActive'])->name('admin.global-prompts.toggle-active');
 });
 
 require __DIR__.'/settings.php';

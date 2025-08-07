@@ -1,0 +1,83 @@
+ĮMONĖS VEIKLOS APRAŠYMAS
+
+  UAB "TechSprendimai"
+  Įmonės kodas: 123456789
+  Adresas: Gedimino pr. 15, Vilnius, LT-01103
+
+  APIE MUS
+
+  UAB "TechSprendimai" yra pirmaujanti IT sprendimų įmonė Lietuvoje, teikianti
+  inovatyvius technologinius sprendimus verslui nuo 2015 metų. Mūsų
+  specializacija - programinės įrangos kūrimas, debesų kompiuterijos sprendimai
+  ir dirbtinio intelekto integracijos.
+
+  MŪSŲ PASLAUGOS
+
+  1. Programinės įrangos kūrimas
+     - Individualūs web sprendimai
+     - Mobiliosios aplikacijos (iOS, Android)
+     - Verslo valdymo sistemos
+     - API integracijos
+
+  2. Debesų kompiuterijos sprendimai
+     - AWS infrastruktūros valdymas
+     - Azure sprendimai
+     - Duomenų migracijos į debesis
+     - DevOps konsultacijos
+
+  3. Dirbtinio intelekto sprendimai
+     - Kalbos atpažinimo sistemos
+     - Chatbot'ų kūrimas
+     - Duomenų analizės įrankiai
+     - Automatizuoti klientų aptarnavimo sprendimai
+
+  DARBO LAIKAS
+  Pirmadieniais-Penktadieniais: 8:00 - 17:00
+  Šeštadieniais-Sekmadieniais: Nedirbame
+  Švenčių dienomis: Nedirbame
+
+  KONTAKTAI
+  El. paštas: info@techsprendimai.lt
+  Telefonas: +370 5 123 4567
+  Nemokama linija: 8 800 12345
+
+  DAŽNAI UŽDUODAMI KLAUSIMAI
+
+  K: Kiek laiko užtrunka projekto įgyvendinimas?
+  A: Projekto trukmė priklauso nuo jo sudėtingumo. Paprastai:
+     - Nedideli projektai: 2-4 savaitės
+     - Vidutiniai projektai: 1-3 mėnesiai
+     - Dideli projektai: 3-6 mėnesiai
+
+  K: Ar teikiate garantiją savo produktams?
+  A: Taip, visiems mūsų sukurtiems sprendimams suteikiame 12 mėnesių garantiją.
+  Garantinis aptarnavimas apima klaidų taisymą ir techninę pagalbą.
+
+  K: Kokius mokėjimo būdus priimate?
+  A: Priimame:
+     - Bankinius pavedimus
+     - Kreditines korteles (Visa, Mastercard)
+     - PayPal
+     - Išankstinį apmokėjimą arba mokėjimą dalimis
+
+  K: Ar galima užsakyti konsultaciją?
+  A: Žinoma! Pirmoji 30 minučių konsultacija yra nemokama. Galite registruotis
+  per mūsų svetainę arba paskambinti telefonu.
+
+  KAINODARA
+
+  Mūsų kainos priklauso nuo projekto:
+  - Konsultacijos: 50-100 EUR/val.
+  - Programavimo darbai: 40-80 EUR/val.
+  - Palaikymas: nuo 200 EUR/mėn.
+
+  PRIVATUMO POLITIKA
+
+  Mes gerbiame jūsų privatumą ir saugome asmens duomenis pagal BDAR reikalavimus.
+   Jūsų duomenys naudojami tik paslaugų teikimui ir nėra perduodami tretiesiems
+  asmenims be jūsų sutikimo.
+
+  GRĄŽINIMO POLITIKA
+
+  Paslaugų atsisakyti galite per 14 dienų nuo sutarties pasirašymo, jei darbai
+  dar nepradėti. Už jau atliktus darbus grąžinimas netaikomas.

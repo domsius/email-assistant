@@ -20,6 +20,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('email-accounts/{emailAccount}/sync-status', [App\Http\Controllers\Api\EmailAccountController::class, 'syncStatus']);
     Route::get('email-accounts/{emailAccount}/sync-progress', [App\Http\Controllers\Api\EmailAccountController::class, 'syncProgress']);
     Route::post('email-accounts/{emailAccount}/test', [App\Http\Controllers\Api\EmailAccountController::class, 'testConnection']);
+    Route::get('email-accounts/{emailAccount}/signature', [App\Http\Controllers\Api\EmailAccountController::class, 'getSignature']);
     Route::apiResource('email-accounts', App\Http\Controllers\Api\EmailAccountController::class);
 
     // AI Processing routes

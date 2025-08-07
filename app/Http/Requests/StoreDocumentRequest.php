@@ -22,13 +22,8 @@ class StoreDocumentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'documents' => ['required', 'array', 'min:1', 'max:10'],
-            'documents.*' => [
-                'required',
-                'file',
-                'max:10240', // 10MB max
-                'mimes:pdf,doc,docx,txt,md,csv,xls,xlsx,json',
-            ],
+            'title' => 'required|string|max:255',
+            'file' => 'required|file|mimes:pdf,doc,docx,txt,md,csv,json|max:20480', // 20MB
         ];
     }
 
@@ -38,11 +33,8 @@ class StoreDocumentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'documents.required' => 'Please select at least one document to upload.',
-            'documents.max' => 'You can upload a maximum of 10 documents at a time.',
-            'documents.*.file' => 'Each upload must be a valid file.',
-            'documents.*.max' => 'Each document must not exceed 10MB.',
-            'documents.*.mimes' => 'Supported formats: PDF, DOC, DOCX, TXT, MD, CSV, XLS, XLSX, JSON.',
+            'file.mimes' => 'The document must be a PDF, Word document, text file, Markdown, CSV, or JSON file.',
+            'file.max' => 'The document must not be larger than 20MB.',
         ];
     }
 }

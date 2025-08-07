@@ -138,7 +138,7 @@ class ElasticsearchService
                 ],
             ]);
 
-            return $this->formatSearchResults($response);
+            return $this->formatSearchResults($response->asArray());
         } catch (Exception $e) {
             Log::error('Vector search failed: '.$e->getMessage());
             throw $e;
@@ -179,7 +179,7 @@ class ElasticsearchService
                 ],
             ]);
 
-            return $this->formatSearchResults($response);
+            return $this->formatSearchResults($response->asArray());
         } catch (Exception $e) {
             Log::error('Hybrid search failed: '.$e->getMessage());
             throw $e;

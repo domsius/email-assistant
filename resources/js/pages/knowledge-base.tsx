@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, usePage, router, useForm } from "@inertiajs/react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -8,11 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -22,15 +20,12 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DocumentCard, DocumentListItem } from "@/components/ui/document-card";
+import { DocumentListItem } from "@/components/ui/document-card";
 import {
   SummaryStatsCard,
   StatsGroup,
 } from "@/components/ui/summary-stats-card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatusIndicator } from "@/components/ui/status-indicator";
-import { FileTypeIcon } from "@/components/ui/file-type-icon";
 import AppLayout from "@/layouts/app-layout";
 import { type BreadcrumbItem } from "@/types";
 import { Head } from "@inertiajs/react";
@@ -38,17 +33,8 @@ import {
   FileText,
   Upload,
   Search,
-  Trash2,
-  Download,
-  Eye,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  FileIcon,
-  FileType,
   Database,
   Brain,
-  Sparkles,
   RefreshCw,
 } from "lucide-react";
 
@@ -56,7 +42,7 @@ interface Document {
   id: number;
   title: string;
   filename: string;
-  type: "pdf" | "docx" | "txt" | "md";
+  type: string;
   size: number;
   status: "pending" | "processing" | "processed" | "error";
   chunks: number;
@@ -100,9 +86,20 @@ export default function KnowledgeBase({
     storageLimit: 1073741824, // 1GB default
   },
 }: KnowledgeBaseProps) {
+  const { flash } = usePage().props as any;
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Handle flash messages
+  useEffect(() => {
+    if (flash?.success) {
+      toast.success(flash.success);
+    }
+    if (flash?.error) {
+      toast.error(flash.error);
+    }
+  }, [flash]);
 
   const form = useForm({
     title: "",
@@ -334,10 +331,6 @@ export default function KnowledgeBase({
                   <DocumentListItem
                     key={doc.id}
                     {...doc}
-                    onView={(id) => router.get(`/knowledge-base/${id}`)}
-                    onDownload={(id) =>
-                      window.open(`/knowledge-base/${id}/download`, "_blank")
-                    }
                     onDelete={handleDelete}
                     onReprocess={handleReprocess}
                   />

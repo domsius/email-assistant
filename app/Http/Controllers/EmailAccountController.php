@@ -40,7 +40,9 @@ class EmailAccountController extends Controller
             $companyId = $defaultCompany->id;
         }
 
+        // Only show email accounts belonging to the current user
         $accounts = EmailAccount::where('company_id', $companyId)
+            ->where('user_id', $user->id)
             ->get()
             ->map(function ($account) {
                 // Get email stats
@@ -122,6 +124,7 @@ class EmailAccountController extends Controller
         if ($accountId) {
             $emailAccount = EmailAccount::where('id', $accountId)
                 ->where('company_id', $companyId)
+                ->where('user_id', $user->id)  // Ensure user owns this account
                 ->first();
 
             if (! $emailAccount) {
@@ -132,6 +135,7 @@ class EmailAccountController extends Controller
             $tempEmail = 'pending_'.time().'_'.auth()->id().'@'.$provider.'.com';
             $emailAccount = EmailAccount::create([
                 'company_id' => $companyId,
+                'user_id' => $user->id,  // Assign to current user
                 'email_address' => $tempEmail,
                 'provider' => $provider,
                 'is_active' => false,
@@ -171,8 +175,9 @@ class EmailAccountController extends Controller
 
     public function remove(EmailAccount $emailAccount): RedirectResponse
     {
-        // Ensure user can access this account
-        if ($emailAccount->company_id !== auth()->user()->company_id) {
+        // Ensure user owns this account
+        $user = auth()->user();
+        if ($emailAccount->company_id !== $user->company_id || $emailAccount->user_id !== $user->id) {
             abort(403);
         }
 
@@ -183,8 +188,9 @@ class EmailAccountController extends Controller
 
     public function sync(EmailAccount $emailAccount): RedirectResponse
     {
-        // Ensure user can access this account
-        if ($emailAccount->company_id !== auth()->user()->company_id) {
+        // Ensure user owns this account
+        $user = auth()->user();
+        if ($emailAccount->company_id !== $user->company_id || $emailAccount->user_id !== $user->id) {
             abort(403);
         }
 

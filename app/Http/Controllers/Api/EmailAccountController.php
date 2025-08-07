@@ -24,7 +24,9 @@ class EmailAccountController extends Controller
      */
     public function index(): JsonResponse
     {
-        $accounts = EmailAccount::where('company_id', auth()->user()->company_id)
+        $user = auth()->user();
+        $accounts = EmailAccount::where('company_id', $user->company_id)
+            ->where('user_id', $user->id)  // Only show user's own accounts
             ->with(['company'])
             ->get();
 
@@ -51,10 +53,12 @@ class EmailAccountController extends Controller
             'email_address' => 'required|email',
         ]);
 
-        $companyId = auth()->user()->company_id;
+        $user = auth()->user();
+        $companyId = $user->company_id;
 
-        // Check if account already exists
+        // Check if account already exists for this user
         $existingAccount = EmailAccount::where('company_id', $companyId)
+            ->where('user_id', $user->id)
             ->where('email_address', $request->email_address)
             ->where('provider', $request->provider)
             ->first();
@@ -69,6 +73,7 @@ class EmailAccountController extends Controller
         $emailAccount = EmailAccount::updateOrCreate(
             [
                 'company_id' => $companyId,
+                'user_id' => $user->id,  // Assign to current user
                 'email_address' => $request->email_address,
                 'provider' => $request->provider,
             ],
@@ -152,8 +157,9 @@ class EmailAccountController extends Controller
                 $accountInfo = $providerService->getAccountInfo();
                 $actualEmail = $accountInfo['email'] ?? $emailAccount->email_address;
 
-                // Check if this email is already connected for this company
+                // Check if this email is already connected for this user
                 $existingAccount = EmailAccount::where('company_id', $emailAccount->company_id)
+                    ->where('user_id', $emailAccount->user_id)
                     ->where('email_address', $actualEmail)
                     ->where('provider', $provider)
                     ->where('id', '!=', $emailAccount->id)
@@ -205,8 +211,9 @@ class EmailAccountController extends Controller
      */
     public function syncProgress(EmailAccount $emailAccount): JsonResponse
     {
-        // Ensure user can access this account
-        if ($emailAccount->company_id !== auth()->user()->company_id) {
+        // Ensure user owns this account
+        $user = auth()->user();
+        if ($emailAccount->company_id !== $user->company_id || $emailAccount->user_id !== $user->id) {
             abort(403);
         }
 
@@ -230,8 +237,9 @@ class EmailAccountController extends Controller
     {
         $validated = $request->validated();
 
-        // Ensure user can access this account
-        if ($emailAccount->company_id !== auth()->user()->company_id) {
+        // Ensure user owns this account
+        $user = auth()->user();
+        if ($emailAccount->company_id !== $user->company_id || $emailAccount->user_id !== $user->id) {
             abort(403);
         }
 
@@ -269,8 +277,9 @@ class EmailAccountController extends Controller
      */
     public function testConnection(EmailAccount $emailAccount): JsonResponse
     {
-        // Ensure user can access this account
-        if ($emailAccount->company_id !== auth()->user()->company_id) {
+        // Ensure user owns this account
+        $user = auth()->user();
+        if ($emailAccount->company_id !== $user->company_id || $emailAccount->user_id !== $user->id) {
             abort(403);
         }
 
@@ -304,8 +313,9 @@ class EmailAccountController extends Controller
      */
     public function syncStatus(EmailAccount $emailAccount): JsonResponse
     {
-        // Ensure user can access this account
-        if ($emailAccount->company_id !== auth()->user()->company_id) {
+        // Ensure user owns this account
+        $user = auth()->user();
+        if ($emailAccount->company_id !== $user->company_id || $emailAccount->user_id !== $user->id) {
             abort(403);
         }
 
@@ -315,12 +325,58 @@ class EmailAccountController extends Controller
     }
 
     /**
+     * Get email signature for a specific from address
+     */
+    public function getSignature(Request $request, EmailAccount $emailAccount): JsonResponse
+    {
+        // Ensure user owns this account
+        $user = auth()->user();
+        if ($emailAccount->company_id !== $user->company_id || $emailAccount->user_id !== $user->id) {
+            abort(403);
+        }
+
+        $request->validate([
+            'from_address' => 'required|email',
+        ]);
+
+        try {
+            $provider = $this->providerFactory->createProvider($emailAccount);
+            
+            // Check if provider supports getting signatures
+            if (!method_exists($provider, 'getSignature')) {
+                return response()->json([
+                    'signature' => null,
+                    'message' => 'Provider does not support signatures',
+                ]);
+            }
+
+            $signature = $provider->getSignature($request->from_address);
+
+            return response()->json([
+                'signature' => $signature,
+                'from_address' => $request->from_address,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to get email signature', [
+                'account_id' => $emailAccount->id,
+                'from_address' => $request->from_address,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to get signature: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Remove an email account
      */
     public function destroy(EmailAccount $emailAccount): JsonResponse
     {
-        // Ensure user can access this account
-        if ($emailAccount->company_id !== auth()->user()->company_id) {
+        // Ensure user owns this account
+        $user = auth()->user();
+        if ($emailAccount->company_id !== $user->company_id || $emailAccount->user_id !== $user->id) {
             abort(403);
         }
 

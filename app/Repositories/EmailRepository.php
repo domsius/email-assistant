@@ -387,21 +387,33 @@ class EmailRepository
 
     /**
      * Get account IDs for a company
+     * ALL users (including admin) only see their own email accounts
      */
     private function getAccountIds(int $companyId, ?int $accountId): array
     {
+        $user = auth()->user();
+        
         if ($accountId) {
-            // Verify the account belongs to the company
-            $exists = EmailAccount::where('id', $accountId)
-                ->where('company_id', $companyId)
-                ->exists();
+            // Verify the account belongs to the company and user has access
+            $query = EmailAccount::where('id', $accountId)
+                ->where('company_id', $companyId);
+            
+            // ALL users can only access their own accounts
+            // Strict isolation - no access to unassigned accounts
+            $query->where('user_id', $user->id);
+            
+            $exists = $query->exists();
 
             return $exists ? [$accountId] : [];
         }
 
-        return EmailAccount::where('company_id', $companyId)
-            ->pluck('id')
-            ->toArray();
+        $query = EmailAccount::where('company_id', $companyId);
+        
+        // ALL users only see their own accounts
+        // Strict isolation - even admins don't see other users' emails
+        $query->where('user_id', $user->id);
+        
+        return $query->pluck('id')->toArray();
     }
 
     /**

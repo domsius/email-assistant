@@ -15,6 +15,7 @@ use App\Services\LanguageDetectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class EmailController extends Controller
 {
@@ -217,10 +218,11 @@ class EmailController extends Controller
     public function generateResponse(GenerateResponseRequest $request, EmailMessage $email): JsonResponse
     {
         $validated = $request->validated();
+        $user = Auth::user();
 
         try {
             // Generate AI response
-            $result = $this->aiResponseService->generateResponse($email, auth()->user());
+            $result = $this->aiResponseService->generateResponse($email, $user);
 
             // For now, return the response directly without saving as draft
             return response()->json([

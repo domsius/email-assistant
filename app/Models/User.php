@@ -81,4 +81,28 @@ class User extends Authenticatable
     {
         return $this->hasMany(EmailDraft::class);
     }
+
+    /**
+     * Check if user has admin role
+     */
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    /**
+     * Global AI prompts created by this user
+     */
+    public function createdGlobalPrompts()
+    {
+        return $this->hasMany(GlobalAIPrompt::class, 'created_by');
+    }
+
+    /**
+     * Global AI prompts updated by this user
+     */
+    public function updatedGlobalPrompts()
+    {
+        return $this->hasMany(GlobalAIPrompt::class, 'updated_by');
+    }
 }

@@ -95,6 +95,7 @@ class EmailService
     ): array {
         $user = auth()->user();
 
+        // Drafts are always user-specific
         $query = EmailDraft::where('user_id', $user->id)
             ->where('is_deleted', false)
             ->with(['emailAccount', 'originalEmail']);
@@ -310,12 +311,18 @@ class EmailService
 
     /**
      * Get email accounts for a company
+     * ALL users (including admin) only see their own email accounts
      */
     public function getEmailAccounts(int $companyId): Collection
     {
-        $accounts = EmailAccount::where('company_id', $companyId)
-            ->with('aliases')
-            ->get();
+        $user = auth()->user();
+        $query = EmailAccount::where('company_id', $companyId);
+        
+        // ALL users only see their own email accounts
+        // Strict isolation - no access to unassigned accounts
+        $query->where('user_id', $user->id);
+        
+        $accounts = $query->with('aliases')->get();
             
         // Transform the data to match the expected format
         return $accounts->map(function ($account) {

@@ -46,10 +46,10 @@ class DocumentProcessingService
                 throw new Exception('No text content extracted from document');
             }
 
-            // Update document with extracted text
-            $document->update([
-                'content' => $text,
-                'extracted_at' => now(),
+            // Log that text was extracted
+            Log::info('Text extracted from document', [
+                'document_id' => $document->id,
+                'text_length' => strlen($text),
             ]);
 
             // Create chunks
@@ -66,7 +66,7 @@ class DocumentProcessingService
             // Update status to processed
             $document->update([
                 'status' => 'processed',
-                'processed_at' => now(),
+                'chunk_count' => count($chunks),
             ]);
 
             Log::info('Document processed successfully', [
@@ -82,7 +82,7 @@ class DocumentProcessingService
             ]);
 
             $document->update([
-                'status' => 'failed',
+                'status' => 'error',
                 'error_message' => $e->getMessage(),
             ]);
 
@@ -296,15 +296,23 @@ class DocumentProcessingService
         $embedding = $this->embeddingService->generateEmbedding($chunkText);
 
         // Create chunk record
-        $chunk = $document->chunks()->create([
-            'chunk_index' => $index,
+        $chunkData = [
+            'document_id' => $document->id,
+            'chunk_number' => $index + 1, // Start from 1 instead of 0
             'content' => $chunkText,
             'embedding' => json_encode($embedding),
+            'start_position' => 0, // You might want to track actual positions
+            'end_position' => strlen($chunkText),
             'metadata' => [
                 'char_count' => strlen($chunkText),
                 'word_count' => str_word_count($chunkText),
             ],
-        ]);
+        ];
+        
+        Log::info('Creating chunk with data:', $chunkData);
+        
+        // Create directly instead of through relationship
+        $chunk = DocumentChunk::create($chunkData);
 
         // Index chunk in Elasticsearch with embedding
         $this->elasticsearch->indexChunk($chunk, $embedding);

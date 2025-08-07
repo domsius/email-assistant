@@ -13,6 +13,7 @@ class EmailAccount extends Model
 
     protected $fillable = [
         'company_id',
+        'user_id',
         'email_address',
         'provider',
         'provider_account_id',
@@ -47,6 +48,11 @@ class EmailAccount extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function emailMessages(): HasMany

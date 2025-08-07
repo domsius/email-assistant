@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Customer;
 use App\Models\EmailMessage;
+use App\Models\GlobalAIPrompt;
 use App\Models\User;
 use Exception;
 use Illuminate\Support\Facades\App;
@@ -15,6 +16,10 @@ class AIResponseService extends BaseService
     private $client;
 
     private string $model;
+    
+    private ?float $customTemperature = null;
+    
+    private ?int $customMaxTokens = null;
 
     public function __construct()
     {
@@ -48,8 +53,14 @@ class AIResponseService extends BaseService
                 $enhancedContext = $ragResult['enhanced_context'];
                 $sources = $ragResult['sources'];
 
-                // Create the system prompt
+                // Create the system prompt with global admin prompts
                 $systemPrompt = $this->createSystemPrompt($emailMessage, $user);
+
+                // Apply global admin prompt if available
+                $globalPrompt = $this->getGlobalPrompt($emailMessage, ! empty($sources));
+                if ($globalPrompt) {
+                    $systemPrompt = $this->mergeWithGlobalPrompt($systemPrompt, $globalPrompt);
+                }
 
                 // Add RAG instructions to system prompt
                 if (! empty($sources)) {
@@ -58,15 +69,21 @@ class AIResponseService extends BaseService
 
                 // Measure API call performance
                 $apiResult = $this->measurePerformance(function () use ($systemPrompt, $enhancedContext) {
-                    return $this->client->chat()->create([
+                    $params = [
                         'model' => $this->model,
                         'messages' => [
                             ['role' => 'system', 'content' => $systemPrompt],
                             ['role' => 'user', 'content' => $enhancedContext],
                         ],
-                        'temperature' => 0.7,
-                        'max_tokens' => 1000,
-                    ]);
+                        'temperature' => $this->customTemperature ?? 0.7,
+                        'max_tokens' => $this->customMaxTokens ?? 1000,
+                    ];
+                    
+                    // Reset custom values after use
+                    $this->customTemperature = null;
+                    $this->customMaxTokens = null;
+                    
+                    return $this->client->chat()->create($params);
                 }, 'OpenAI API call');
 
                 $completion = $apiResult['result'];
@@ -387,6 +404,63 @@ class AIResponseService extends BaseService
         $customerName = $emailMessage->customer?->name ?? $emailMessage->sender_name ?? 'Customer';
 
         return str_replace('{name}', $customerName, $template);
+    }
+
+    /**
+     * Get global prompt if configured by admin
+     */
+    private function getGlobalPrompt(EmailMessage $emailMessage, bool $hasRAGSources): ?GlobalAIPrompt
+    {
+        $companyId = $emailMessage->emailAccount->company_id;
+        
+        // If RAG sources are available, prioritize RAG-enhanced prompt
+        if ($hasRAGSources) {
+            $ragPrompt = GlobalAIPrompt::getActiveRAGPromptForCompany($companyId);
+            if ($ragPrompt) {
+                return $ragPrompt;
+            }
+        }
+        
+        // Fall back to general global prompt
+        return GlobalAIPrompt::getActivePromptForCompany($companyId);
+    }
+
+    /**
+     * Merge system prompt with global admin prompt
+     */
+    private function mergeWithGlobalPrompt(string $systemPrompt, GlobalAIPrompt $globalPrompt): string
+    {
+        $mergedPrompt = "";
+        
+        // Add global prompt header
+        $mergedPrompt .= "=== COMPANY GLOBAL AI INSTRUCTIONS ===\n";
+        $mergedPrompt .= $globalPrompt->prompt_content . "\n";
+        $mergedPrompt .= "=== END OF GLOBAL INSTRUCTIONS ===\n\n";
+        
+        // Add the original system prompt
+        $mergedPrompt .= $systemPrompt;
+        
+        // Apply any custom settings from global prompt
+        if ($globalPrompt->settings) {
+            $settings = $globalPrompt->settings;
+            
+            // Add any additional instructions based on settings
+            if (isset($settings['temperature'])) {
+                // Temperature will be used in the API call
+                $this->customTemperature = $settings['temperature'];
+            }
+            
+            if (isset($settings['max_tokens'])) {
+                $this->customMaxTokens = $settings['max_tokens'];
+            }
+            
+            if (isset($settings['additional_instructions'])) {
+                $mergedPrompt .= "\n\nADDITIONAL INSTRUCTIONS:\n";
+                $mergedPrompt .= $settings['additional_instructions'];
+            }
+        }
+        
+        return $mergedPrompt;
     }
 
     /**

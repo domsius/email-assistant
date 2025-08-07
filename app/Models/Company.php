@@ -60,6 +60,11 @@ class Company extends Model
         return $this->hasMany(AuditLog::class);
     }
 
+    public function globalPrompts(): HasMany
+    {
+        return $this->hasMany(GlobalAIPrompt::class);
+    }
+
     public function getCurrentMonthUsage(): int
     {
         return $this->emailAccounts()
