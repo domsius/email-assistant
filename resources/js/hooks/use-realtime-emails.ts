@@ -10,8 +10,19 @@ export function useRealtimeEmails(companyId: number, folder: string = 'INBOX') {
       return;
     }
 
+    console.log('Setting up WebSocket for company:', companyId, 'folder:', folder);
+
     // Subscribe to company's email channel
     const channel = window.Echo.private(`company.${companyId}.emails`);
+    
+    // Add subscription success/error handlers
+    channel.subscribed(() => {
+      console.log('Successfully subscribed to company.${companyId}.emails channel');
+    });
+
+    channel.error((error: any) => {
+      console.error('Channel subscription error:', error);
+    });
     
     // Listen for new emails
     channel.listen('.email.received', (e: any) => {
@@ -23,15 +34,15 @@ export function useRealtimeEmails(companyId: number, folder: string = 'INBOX') {
         duration: 5000,
       });
       
-      // Reload only if viewing the same folder
-      if (e.folder === folder) {
-        // Reload email list preserving scroll position
-        router.reload({
-          only: ['emails', 'pagination'],
-          preserveScroll: true,
-          preserveState: true,
-        });
-      }
+      // Debug info
+      console.log('Email folder:', e.folder, 'Current folder:', folder);
+      console.log('Router object:', router);
+      
+      // Force a full page reload for now to ensure updates show
+      console.log('Triggering page reload in 500ms...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     });
 
     // Cleanup on unmount

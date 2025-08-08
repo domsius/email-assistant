@@ -83,4 +83,5 @@ Thumbs.db
 # Project specific
 .serena/
 .claude/
-Archive.zip.env.localhost
+Archive.zip
+.env.localhost

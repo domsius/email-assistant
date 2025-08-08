@@ -26,7 +26,6 @@ window.Echo = new Echo({
       'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
     },
   },
-  wsPath: import.meta.env.VITE_REVERB_PATH ?? '/app',
 });
 
 export default window.Echo;

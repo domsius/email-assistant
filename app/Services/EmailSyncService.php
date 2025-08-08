@@ -221,11 +221,14 @@ class EmailSyncService extends BaseService
 
         // Broadcast new email event for real-time updates
         try {
+            \Log::info('Broadcasting NewEmailReceived event', ['email_id' => $emailMessage->id]);
             broadcast(new \App\Events\NewEmailReceived($emailMessage));
+            \Log::info('Successfully broadcasted NewEmailReceived event', ['email_id' => $emailMessage->id]);
         } catch (\Exception $e) {
-            \Log::warning('Failed to broadcast new email event', [
+            \Log::error('Failed to broadcast new email event', [
                 'email_id' => $emailMessage->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
         }
 
