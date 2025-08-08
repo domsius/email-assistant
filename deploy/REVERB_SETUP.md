@@ -28,7 +28,7 @@ REVERB_HOST=srv806757.hstgr.cloud
 REVERB_PORT=443
 REVERB_SCHEME=https
 REVERB_SERVER_HOST=0.0.0.0
-REVERB_SERVER_PORT=8080
+REVERB_SERVER_PORT=8081
 
 # Frontend Configuration
 VITE_REVERB_APP_KEY="${REVERB_APP_KEY}"
@@ -57,7 +57,7 @@ Add this to your Nginx server block (inside the `server { }` section):
 ```nginx
 # WebSocket proxy for Laravel Reverb
 location /app {
-    proxy_pass http://127.0.0.1:8080;
+    proxy_pass http://127.0.0.1:8081;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -123,14 +123,14 @@ curl -i -N \
   -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" \
   -H "Sec-WebSocket-Key: test" \
-  http://127.0.0.1:8080/app
+  http://127.0.0.1:8081/app
 ```
 
 ### Common Issues
 
-1. **Port 8080 blocked**: Ensure firewall allows internal connections on port 8080
+1. **Port 8081 blocked**: Ensure firewall allows internal connections on port 8081
    ```bash
-   sudo ufw allow from 127.0.0.1 to any port 8080
+   sudo ufw allow from 127.0.0.1 to any port 8081
    ```
 
 2. **Supervisor not starting**: Check permissions
