@@ -43,12 +43,21 @@ export function EmailEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const [isEmpty, setIsEmpty] = useState(!content || content === '<p></p>' || content === '<br>');
   const [selection, setSelection] = useState<Range | null>(null);
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize editor with content
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== content) {
       editorRef.current.innerHTML = content || '';
       setIsEmpty(!content || content === '<p></p>' || content === '<br>');
+      // Initialize history with initial content
+      if (history.length === 0) {
+        setHistory([content || '']);
+        setHistoryIndex(0);
+      }
       
       // Debug logging for signatures
       if (content && content.includes('table')) {
@@ -89,12 +98,47 @@ export function EmailEditor({
     }
   }, [content]);
 
+  // Check active formats at current cursor position
+  const checkActiveFormats = () => {
+    const formats = new Set<string>();
+    
+    // Check if we're in a list or link
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      let node = sel.getRangeAt(0).startContainer;
+      while (node && node !== editorRef.current) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const element = node as HTMLElement;
+          if (element.nodeName === 'UL') formats.add('unorderedList');
+          if (element.nodeName === 'OL') formats.add('orderedList');
+          if (element.nodeName === 'B' || element.nodeName === 'STRONG') formats.add('bold');
+          if (element.nodeName === 'I' || element.nodeName === 'EM') formats.add('italic');
+          if (element.nodeName === 'U') formats.add('underline');
+          if (element.nodeName === 'BLOCKQUOTE') formats.add('blockquote');
+          if (element.nodeName === 'A') formats.add('link');
+        }
+        node = node.parentNode;
+      }
+    }
+    
+    // Check using queryCommandState for more reliable detection
+    if (document.queryCommandState('bold')) formats.add('bold');
+    if (document.queryCommandState('italic')) formats.add('italic');
+    if (document.queryCommandState('underline')) formats.add('underline');
+    if (document.queryCommandState('insertUnorderedList')) formats.add('unorderedList');
+    if (document.queryCommandState('insertOrderedList')) formats.add('orderedList');
+    if (document.queryCommandState('createLink')) formats.add('link');
+    
+    setActiveFormats(formats);
+  };
+
   // Save selection before toolbar actions
   const saveSelection = () => {
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
       setSelection(sel.getRangeAt(0));
     }
+    checkActiveFormats();
   };
 
   // Restore selection after toolbar actions
@@ -108,22 +152,127 @@ export function EmailEditor({
     }
   };
 
+  // Add to history
+  const addToHistory = (html: string) => {
+    // Don't add if it's the same as current history item
+    if (history[historyIndex] === html) {
+      return;
+    }
+    
+    // Remove any history items after current index (for when we've undone and then type)
+    const newHistory = history.slice(0, historyIndex + 1);
+    
+    // Add new content to history (limit to 100 items for more granular undo)
+    newHistory.push(html);
+    if (newHistory.length > 100) {
+      // Remove oldest items
+      newHistory.splice(0, newHistory.length - 100);
+    }
+    
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
   // Handle content changes
-  const handleInput = () => {
+  const handleInput = (e: any) => {
     if (editorRef.current) {
       const html = editorRef.current.innerHTML;
       setIsEmpty(!html || html === '<br>' || html === '<p></p>');
       onChange(html);
+      checkActiveFormats();
+      
+      // Check if this is a regular typing event (single character changes)
+      const inputType = e.nativeEvent?.inputType;
+      
+      // For character input, save immediately to history
+      if (inputType === 'insertText' || 
+          inputType === 'deleteContentBackward' || 
+          inputType === 'deleteContentForward' ||
+          inputType === 'insertCompositionText') {
+        // Add each character change to history immediately
+        addToHistory(html);
+      } else if (inputType === 'insertParagraph' || 
+                 inputType === 'insertLineBreak' ||
+                 inputType === 'formatBold' ||
+                 inputType === 'formatItalic' ||
+                 inputType === 'formatUnderline' ||
+                 inputType === 'insertFromPaste' ||
+                 inputType === 'insertReplacementText') {
+        // For other operations, also save immediately
+        addToHistory(html);
+      } else {
+        // For any other input types, use debouncing as fallback
+        if (historyTimeoutRef.current) {
+          clearTimeout(historyTimeoutRef.current);
+        }
+        
+        historyTimeoutRef.current = setTimeout(() => {
+          addToHistory(html);
+        }, 100); // Shorter delay for other operations
+      }
     }
   };
 
   // Execute formatting commands
   const execCommand = (command: string, value?: string) => {
-    saveSelection();
+    // Ensure editor has focus
     editorRef.current?.focus();
-    restoreSelection();
-    document.execCommand(command, false, value);
-    handleInput();
+    
+    // Special handling for list commands
+    if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
+      // For list commands, we need to ensure we're working with block-level content
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        
+        // If the selection is collapsed (no text selected), select the current line/paragraph
+        if (range.collapsed && editorRef.current) {
+          // Find the current block element
+          let node = range.startContainer;
+          while (node && node !== editorRef.current) {
+            if (node.nodeType === Node.ELEMENT_NODE && 
+                (node.nodeName === 'P' || node.nodeName === 'DIV' || node.nodeName === 'LI')) {
+              const newRange = document.createRange();
+              newRange.selectNodeContents(node);
+              sel.removeAllRanges();
+              sel.addRange(newRange);
+              break;
+            }
+            node = node.parentNode;
+          }
+        }
+      }
+    } else {
+      // For other commands, ensure we have a selection
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) {
+        // If no selection, select all content for commands to work
+        if (editorRef.current && editorRef.current.childNodes.length > 0) {
+          const range = document.createRange();
+          range.selectNodeContents(editorRef.current);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
+      }
+    }
+    
+    // Execute the command
+    const result = document.execCommand(command, false, value);
+    
+    // Get the new content and update
+    if (editorRef.current) {
+      const html = editorRef.current.innerHTML;
+      onChange(html);
+      checkActiveFormats();
+      
+      // Add to history immediately for formatting commands
+      addToHistory(html);
+    }
+    
+    // Keep focus on editor
+    editorRef.current?.focus();
+    
+    return result;
   };
 
   // Handle paste to preserve HTML
@@ -138,16 +287,64 @@ export function EmailEditor({
     } else if (text) {
       document.execCommand('insertText', false, text);
     }
-    handleInput();
+    
+    // Update and save to history immediately after paste
+    if (editorRef.current) {
+      const newHtml = editorRef.current.innerHTML;
+      onChange(newHtml);
+      checkActiveFormats();
+      addToHistory(newHtml);
+    }
   };
 
   const addLink = () => {
-    const url = window.prompt('Enter URL:');
-    if (url && url.trim()) {
+    // Save current selection first
+    saveSelection();
+    
+    // Get the current selection
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) {
+      alert('Please select some text first to create a link');
+      return;
+    }
+    
+    const selectedText = sel.toString();
+    
+    // Check if selection is already a link
+    let node = sel.getRangeAt(0).startContainer;
+    let isLink = false;
+    while (node && node !== editorRef.current) {
+      if (node.nodeType === Node.ELEMENT_NODE && node.nodeName === 'A') {
+        isLink = true;
+        break;
+      }
+      node = node.parentNode;
+    }
+    
+    if (isLink) {
+      // Remove link
+      execCommand('unlink');
+      return;
+    }
+    
+    if (!selectedText) {
+      alert('Please select some text first to create a link');
+      return;
+    }
+    
+    const url = window.prompt('Enter URL:', 'https://');
+    if (url && url.trim() && url !== 'https://') {
+      // Restore selection before executing command
+      restoreSelection();
+      
+      // If URL doesn't have protocol, add https://
+      const finalUrl = url.match(/^https?:\/\//) ? url : `https://${url}`;
+      
       try {
-        new URL(url); // Validate URL
-        execCommand('createLink', url);
+        new URL(finalUrl); // Validate URL
+        execCommand('createLink', finalUrl);
       } catch (error) {
+        alert('Please enter a valid URL');
         console.error('Invalid URL provided:', error);
       }
     }
@@ -161,6 +358,38 @@ export function EmailEditor({
         execCommand('insertImage', url);
       } catch (error) {
         console.error('Invalid image URL provided:', error);
+      }
+    }
+  };
+
+  // Custom undo function
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const previousContent = history[newIndex];
+      
+      if (editorRef.current) {
+        editorRef.current.innerHTML = previousContent;
+        setHistoryIndex(newIndex);
+        onChange(previousContent);
+        setIsEmpty(!previousContent || previousContent === '<br>' || previousContent === '<p></p>');
+        checkActiveFormats();
+      }
+    }
+  };
+
+  // Custom redo function
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      const nextContent = history[newIndex];
+      
+      if (editorRef.current) {
+        editorRef.current.innerHTML = nextContent;
+        setHistoryIndex(newIndex);
+        onChange(nextContent);
+        setIsEmpty(!nextContent || nextContent === '<br>' || nextContent === '<p></p>');
+        checkActiveFormats();
       }
     }
   };
@@ -188,15 +417,25 @@ export function EmailEditor({
 
           {/* Font Size */}
           <Select
-            onValueChange={(value) => execCommand('fontSize', value)}
+            onValueChange={(value) => {
+              // Use formatBlock for heading sizes or fontSize for legacy support
+              if (value.startsWith('h')) {
+                execCommand('formatBlock', value);
+              } else {
+                execCommand('fontSize', value);
+              }
+            }}
           >
             <SelectTrigger className="w-[100px] h-8 text-xs">
               <SelectValue placeholder="Size" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1">Small</SelectItem>
+              <SelectItem value="1">Tiny</SelectItem>
+              <SelectItem value="2">Small</SelectItem>
               <SelectItem value="3">Normal</SelectItem>
+              <SelectItem value="4">Medium</SelectItem>
               <SelectItem value="5">Large</SelectItem>
+              <SelectItem value="6">Extra Large</SelectItem>
               <SelectItem value="7">Huge</SelectItem>
             </SelectContent>
           </Select>
@@ -205,29 +444,32 @@ export function EmailEditor({
 
           {/* Text Formatting */}
           <Button
-            variant="ghost"
+            variant={activeFormats.has('bold') ? 'secondary' : 'ghost'}
             size="sm"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => execCommand('bold')}
             className="h-8 w-8 p-0"
+            title="Bold (Ctrl+B)"
           >
             <Bold className="h-4 w-4" />
           </Button>
           <Button
-            variant="ghost"
+            variant={activeFormats.has('italic') ? 'secondary' : 'ghost'}
             size="sm"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => execCommand('italic')}
             className="h-8 w-8 p-0"
+            title="Italic (Ctrl+I)"
           >
             <Italic className="h-4 w-4" />
           </Button>
           <Button
-            variant="ghost"
+            variant={activeFormats.has('underline') ? 'secondary' : 'ghost'}
             size="sm"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => execCommand('underline')}
             className="h-8 w-8 p-0"
+            title="Underline (Ctrl+U)"
           >
             <UnderlineIcon className="h-4 w-4" />
           </Button>
@@ -277,20 +519,22 @@ export function EmailEditor({
 
           {/* Lists */}
           <Button
-            variant="ghost"
+            variant={activeFormats.has('unorderedList') ? 'secondary' : 'ghost'}
             size="sm"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => execCommand('insertUnorderedList')}
             className="h-8 w-8 p-0"
+            title="Bullet list"
           >
             <List className="h-4 w-4" />
           </Button>
           <Button
-            variant="ghost"
+            variant={activeFormats.has('orderedList') ? 'secondary' : 'ghost'}
             size="sm"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => execCommand('insertOrderedList')}
             className="h-8 w-8 p-0"
+            title="Numbered list"
           >
             <ListOrdered className="h-4 w-4" />
           </Button>
@@ -299,11 +543,12 @@ export function EmailEditor({
 
           {/* Link & Image */}
           <Button
-            variant="ghost"
+            variant={activeFormats.has('link') ? 'secondary' : 'ghost'}
             size="sm"
             onMouseDown={(e) => e.preventDefault()}
             onClick={addLink}
             className="h-8 w-8 p-0"
+            title={activeFormats.has('link') ? 'Remove link' : 'Add link'}
           >
             <LinkIcon className="h-4 w-4" />
           </Button>
@@ -337,8 +582,10 @@ export function EmailEditor({
             variant="ghost"
             size="sm"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => execCommand('undo')}
+            onClick={handleUndo}
             className="h-8 w-8 p-0"
+            disabled={historyIndex <= 0}
+            title="Undo (Ctrl+Z)"
           >
             <Undo className="h-4 w-4" />
           </Button>
@@ -346,8 +593,10 @@ export function EmailEditor({
             variant="ghost"
             size="sm"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => execCommand('redo')}
+            onClick={handleRedo}
             className="h-8 w-8 p-0"
+            disabled={historyIndex >= history.length - 1}
+            title="Redo (Ctrl+Y)"
           >
             <Redo className="h-4 w-4" />
           </Button>
@@ -363,16 +612,53 @@ export function EmailEditor({
         onFocus={saveSelection}
         onMouseUp={saveSelection}
         onKeyUp={saveSelection}
+        onKeyDown={(e) => {
+          // Handle keyboard shortcuts
+          if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'z' && !e.shiftKey) {
+              e.preventDefault();
+              handleUndo();
+            } else if ((e.key === 'y') || (e.key === 'z' && e.shiftKey)) {
+              e.preventDefault();
+              handleRedo();
+            }
+          }
+        }}
+        onClick={(e) => {
+          // Allow clicking links with Ctrl/Cmd held
+          if ((e.ctrlKey || e.metaKey) && e.target instanceof HTMLAnchorElement) {
+            e.preventDefault();
+            window.open(e.target.href, '_blank');
+          }
+        }}
         className={cn(
           'min-h-[200px] p-4 focus:outline-none',
           'prose prose-sm max-w-none',
           '[&>*:first-child]:mt-0',
+          // Ensure proper rendering of font styles
+          '[&_font]:!inline',
+          '[&_span]:!inline',
+          // Hyperlink styles - blue with underline
+          '[&_a]:text-blue-600 [&_a]:underline [&_a]:cursor-pointer',
+          '[&_a:hover]:text-blue-800 [&_a:hover]:decoration-2',
+          'dark:[&_a]:text-blue-400 dark:[&_a:hover]:text-blue-300',
+          // List styles - ensure lists are visible
+          '[&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2',
+          '[&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2',
+          '[&_li]:ml-2 [&_li]:my-1',
+          // Nested lists
+          '[&_ul_ul]:list-circle [&_ul_ul]:ml-4',
+          '[&_ol_ol]:list-lower-alpha [&_ol_ol]:ml-4',
+          // Blockquote styles
+          '[&_blockquote]:border-l-4 [&_blockquote]:border-gray-300 [&_blockquote]:pl-4 [&_blockquote]:italic',
           isEmpty && 'text-muted-foreground',
           className
         )}
         style={{ minHeight }}
         suppressContentEditableWarning
         data-placeholder={placeholder}
+        // Enable spell check
+        spellCheck={true}
       />
       
       {/* Show placeholder */}
