@@ -30,6 +30,9 @@ class EmailAccount extends Model
         'sync_started_at',
         'sync_completed_at',
         'last_sync_at',
+        'gmail_watch_token',
+        'gmail_watch_expiration',
+        'gmail_history_id',
     ];
 
     protected $casts = [

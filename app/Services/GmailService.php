@@ -207,12 +207,6 @@ class GmailService implements EmailProviderInterface
                 return null;
             }
             
-            // Add debug logging for infinite loop detection
-            Log::info('GmailService: Processing message', [
-                'message_id' => $messageId,
-                'timestamp' => now()->toISOString()
-            ]);
-            
             $fullMessage = $this->gmail->users_messages->get('me', $messageId);
             $headers = $fullMessage->getPayload()->getHeaders();
 
@@ -287,19 +281,6 @@ class GmailService implements EmailProviderInterface
         
         try {
             $this->extractAttachmentsFromPart($message->getPayload(), $attachments, $messageId);
-            
-            Log::info('Gmail: Extracted attachments', [
-                'message_id' => $messageId,
-                'attachment_count' => count($attachments),
-                'attachments' => array_map(function($att) {
-                    return [
-                        'filename' => $att['filename'],
-                        'content_type' => $att['content_type'],
-                        'content_id' => $att['content_id'] ?? null,
-                        'has_attachment_id' => !empty($att['attachment_id']),
-                    ];
-                }, $attachments),
-            ]);
         } catch (Exception $e) {
             Log::error('Error extracting attachments: ' . $e->getMessage(), [
                 'message_id' => $messageId,
@@ -379,13 +360,6 @@ class GmailService implements EmailProviderInterface
                 ];
                 
                 $attachments[] = $attachment;
-                
-                Log::info('Gmail: Found embedded inline image', [
-                    'message_id' => $messageId,
-                    'content_id' => $contentId,
-                    'filename' => $filename,
-                    'data_size' => strlen($body->getData())
-                ]);
             } elseif ($attachmentId) {
                 // Regular attachment with attachment ID
                 $attachment = [
@@ -509,12 +483,6 @@ class GmailService implements EmailProviderInterface
                             $aliasVerified = ($sendAs->getVerificationStatus() === 'accepted');
                             
                             // Log the alias configuration for debugging
-                            Log::info('Gmail alias configuration', [
-                                'email' => $sendAs->getSendAsEmail(),
-                                'verified' => $aliasVerified,
-                                'treatAsAlias' => $sendAs->getTreatAsAlias(),
-                                'isDefault' => $sendAs->getIsDefault(),
-                            ]);
                             break;
                         }
                     }
@@ -542,12 +510,6 @@ class GmailService implements EmailProviderInterface
 
             // Send the email
             $result = $this->gmail->users_messages->send('me', $message);
-
-            Log::info('Email sent successfully', [
-                'messageId' => $result->getId(),
-                'threadId' => $result->getThreadId(),
-                'from' => $emailData['fromAlias'] ?? $this->emailAccount->email_address,
-            ]);
 
             return true;
         } catch (Exception $e) {
@@ -768,8 +730,6 @@ class GmailService implements EmailProviderInterface
                     ->delete();
             }
             
-            Log::info("Synced send-as addresses for account: {$this->emailAccount->email_address}");
-            
         } catch (Exception $e) {
             Log::error("Failed to sync send-as addresses: " . $e->getMessage());
         }
@@ -916,6 +876,189 @@ class GmailService implements EmailProviderInterface
             ]);
             
             return null;
+        }
+    }
+
+    /**
+     * Set up Gmail Push Notifications (watch)
+     * This registers a watch on the user's mailbox to receive push notifications via Pub/Sub
+     * 
+     * @return bool Success status
+     */
+    public function setupWatch(): bool
+    {
+        try {
+            // Check if Pub/Sub topic is configured
+            $topicName = config('services.google.pubsub_topic');
+            
+            if (!$topicName) {
+                throw new Exception('Google Cloud Pub/Sub topic not configured. Set GOOGLE_PUBSUB_TOPIC in .env');
+            }
+            
+            // Create the watch request
+            $watchRequest = new \Google\Service\Gmail\WatchRequest();
+            $watchRequest->setTopicName($topicName);
+            $watchRequest->setLabelIds(['INBOX']); // Watch INBOX label
+            
+            // Optional: Set label filter action to only get notifications for specific labels
+            // $watchRequest->setLabelFilterAction('include'); // or 'exclude'
+            
+            // Execute the watch request
+            $watchResponse = $this->gmail->users->watch('me', $watchRequest);
+            
+            // Generate a verification token for our records
+            $watchToken = bin2hex(random_bytes(32));
+            
+            // Store watch information
+            $this->emailAccount->update([
+                'gmail_watch_token' => $watchToken,
+                'gmail_watch_expiration' => $watchResponse->getExpiration() 
+                    ? \Carbon\Carbon::createFromTimestampMs($watchResponse->getExpiration())
+                    : now()->addDays(7),
+                'gmail_history_id' => $watchResponse->getHistoryId(),
+            ]);
+            
+            return true;
+            
+        } catch (Exception $e) {
+            Log::error('Failed to set up Gmail watch', [
+                'account_id' => $this->emailAccount->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            return false;
+        }
+    }
+    
+    /**
+     * Stop watching the mailbox
+     * 
+     * @return bool Success status
+     */
+    public function stopWatch(): bool
+    {
+        try {
+            $this->gmail->users->stop('me');
+            
+            // Clear watch information
+            $this->emailAccount->update([
+                'gmail_watch_token' => null,
+                'gmail_watch_expiration' => null,
+            ]);
+            
+            return true;
+            
+        } catch (Exception $e) {
+            Log::error('Failed to stop Gmail watch', [
+                'account_id' => $this->emailAccount->id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return false;
+        }
+    }
+    
+    /**
+     * Check if watch needs renewal (expires within 24 hours)
+     * 
+     * @return bool
+     */
+    public function watchNeedsRenewal(): bool
+    {
+        if (!$this->emailAccount->gmail_watch_expiration) {
+            return true;
+        }
+        
+        return now()->addDay()->gte($this->emailAccount->gmail_watch_expiration);
+    }
+    
+    /**
+     * Renew the watch if needed
+     * 
+     * @return bool Success status
+     */
+    public function renewWatchIfNeeded(): bool
+    {
+        if ($this->watchNeedsRenewal()) {
+            // Stop existing watch
+            $this->stopWatch();
+            
+            // Set up new watch
+            return $this->setupWatch();
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Fetch emails using history ID for incremental sync
+     * This is more efficient when using push notifications
+     * 
+     * @param string|null $historyId Starting history ID
+     * @return array
+     */
+    public function fetchEmailsByHistory(?string $historyId = null): array
+    {
+        try {
+            if (!$historyId) {
+                $historyId = $this->emailAccount->gmail_history_id;
+            }
+            
+            if (!$historyId) {
+                // Fall back to regular fetch if no history ID
+                return $this->fetchEmails();
+            }
+            
+            $emails = [];
+            $pageToken = null;
+            
+            do {
+                $params = [
+                    'startHistoryId' => $historyId,
+                    'labelId' => 'INBOX',
+                ];
+                
+                if ($pageToken) {
+                    $params['pageToken'] = $pageToken;
+                }
+                
+                $history = $this->gmail->users_history->listUsersHistory('me', $params);
+                
+                // Process history records
+                foreach ($history->getHistory() as $record) {
+                    // Process added messages
+                    if ($messagesAdded = $record->getMessagesAdded()) {
+                        foreach ($messagesAdded as $messageAdded) {
+                            $message = $messageAdded->getMessage();
+                            $fullMessage = $this->gmail->users_messages->get('me', $message->getId());
+                            $emails[] = $this->parseMessage($fullMessage);
+                        }
+                    }
+                    
+                    // You can also handle messagesDeleted, labelsAdded, labelsRemoved, etc.
+                }
+                
+                // Update history ID
+                if ($newHistoryId = $history->getHistoryId()) {
+                    $this->emailAccount->update(['gmail_history_id' => $newHistoryId]);
+                }
+                
+                $pageToken = $history->getNextPageToken();
+                
+            } while ($pageToken);
+            
+            return $emails;
+            
+        } catch (Exception $e) {
+            Log::error('Failed to fetch emails by history', [
+                'account_id' => $this->emailAccount->id,
+                'history_id' => $historyId,
+                'error' => $e->getMessage(),
+            ]);
+            
+            // Fall back to regular fetch
+            return $this->fetchEmails();
         }
     }
 }

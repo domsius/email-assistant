@@ -39,6 +39,9 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect_uri' => env('GOOGLE_REDIRECT_URI'),
+        'pubsub_topic' => env('GOOGLE_PUBSUB_TOPIC', null), // e.g., 'projects/your-project/topics/gmail-push'
+        'pubsub_push_token' => env('GOOGLE_PUBSUB_PUSH_TOKEN', null), // Optional security token
+        'project_id' => env('GOOGLE_CLOUD_PROJECT_ID', null), // Your Google Cloud project ID
     ],
 
     'microsoft' => [

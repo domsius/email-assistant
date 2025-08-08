@@ -61,6 +61,7 @@ export interface EmailAccount {
   email: string;
   provider: string;
   isActive: boolean;
+  company_id?: number;
   aliases?: EmailAccountAlias[];
 }
 

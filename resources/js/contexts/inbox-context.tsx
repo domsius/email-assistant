@@ -10,6 +10,7 @@ import { router } from "@inertiajs/react";
 import { toast } from "sonner";
 import { setGlobalComposeFunction } from "@/hooks/use-inbox-navigation";
 import type { EmailMessage, EmailAccount, FolderCounts } from "@/types/inbox";
+import Echo from "@/echo";
 
 interface InboxState {
   selectedEmails: (number | string)[];
@@ -623,6 +624,52 @@ export function InboxProvider({
       setGlobalComposeFunction(null);
     };
   }, [enterComposeMode]);
+
+  // Listen for real-time email updates via WebSocket
+  useEffect(() => {
+    if (!emailAccounts.length) return;
+    
+    const companyId = emailAccounts[0]?.company_id;
+    if (!companyId) return;
+
+    const channelName = `company.${companyId}.emails`;
+    const channel = (Echo as any).private(channelName);
+
+    // Listen for general email updates (from sync jobs)
+    channel.listen('.emails.updated', (e: any) => {
+      console.log('Emails updated event received:', e);
+      
+      // Only reload if the update is for the currently selected account or all accounts
+      if (!selectedAccount || e.account_id === selectedAccount || !e.account_id) {
+        // Reload emails and folders to get updated data
+        reloadWithCurrentParams(['emails', 'folders']);
+        
+        // Show notification if emails were processed
+        if (e.processed && e.processed > 0) {
+          toast.info(`Synced ${e.processed} new email${e.processed > 1 ? 's' : ''}`);
+        }
+      }
+    });
+
+    // Listen for new individual emails
+    channel.listen('.email.received', (e: any) => {
+      console.log('New email received:', e);
+      
+      // Reload emails to show the new email
+      reloadWithCurrentParams(['emails', 'folders']);
+      
+      // Show notification for new email
+      toast.info('New email received', {
+        description: `From: ${e.sender_name || e.sender_email}`,
+      });
+    });
+
+    return () => {
+      channel.stopListening('.emails.updated');
+      channel.stopListening('.email.received');
+      Echo.leave(channelName);
+    };
+  }, [emailAccounts, selectedAccount, reloadWithCurrentParams]);
 
   const value: InboxContextValue = {
     ...state,

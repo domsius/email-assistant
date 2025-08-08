@@ -58,14 +58,6 @@ class HtmlSanitizerService
             return '';
         }
 
-        Log::info('=== HtmlSanitizer: Input analysis ===', [
-            'html' => $html,
-            'input_length' => strlen($html),
-            'has_style_tags' => str_contains($html, '<style'),
-            'style_count' => substr_count($html, '<style'),
-            'preview' => substr($html, 0, 200),
-        ]);
-
         // Create a new DOMDocument
         $dom = new \DOMDocument('1.0', 'UTF-8');
 

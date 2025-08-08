@@ -170,10 +170,6 @@ class EmailSyncService extends BaseService
             ->first();
 
         if ($existingEmail) {
-            Log::info('EmailSync: Message already exists', [
-                'message_id' => $messageId,
-                'existing_id' => $existingEmail->id
-            ]);
             return ['status' => 'skipped', 'reason' => 'already_exists'];
         }
 
@@ -215,30 +211,22 @@ class EmailSyncService extends BaseService
 
         // Process attachments if any
         if (!empty($emailData['attachments'])) {
-            Log::info('EmailSync: Processing attachments', [
-                'email_id' => $emailMessage->id,
-                'attachment_count' => count($emailData['attachments']),
-                'attachments' => array_map(function($att) {
-                    return [
-                        'filename' => $att['filename'] ?? 'unknown',
-                        'content_id' => $att['content_id'] ?? null,
-                        'has_attachment_id' => !empty($att['attachment_id']),
-                    ];
-                }, $emailData['attachments']),
-            ]);
-            
             $this->processAttachments($emailMessage, $emailData['attachments'], $emailAccount);
-        } else {
-            Log::info('EmailSync: No attachments to process', [
-                'email_id' => $emailMessage->id,
-                'has_body_html' => !empty($emailData['body_html']),
-                'body_has_cid' => !empty($emailData['body_html']) && str_contains($emailData['body_html'], 'cid:'),
-            ]);
         }
 
         // Dispatch job to process email through AI pipeline (if configured)
         if (config('email-processing.auto_process_incoming', false)) {
             ProcessIncomingEmail::dispatch($emailMessage);
+        }
+
+        // Broadcast new email event for real-time updates
+        try {
+            broadcast(new \App\Events\NewEmailReceived($emailMessage));
+        } catch (\Exception $e) {
+            \Log::warning('Failed to broadcast new email event', [
+                'email_id' => $emailMessage->id,
+                'error' => $e->getMessage()
+            ]);
         }
 
         return ['status' => 'processed', 'email_id' => $emailMessage->id];
@@ -393,13 +381,6 @@ class EmailSyncService extends BaseService
                 if (isset($attachmentData['embedded_data'])) {
                     // Inline image with embedded data - decode it
                     $content = base64_decode(str_replace(['-', '_'], ['+', '/'], $attachmentData['embedded_data']));
-                    
-                    Log::info('EmailSync: Using embedded data for inline image', [
-                        'email_id' => $emailMessage->id,
-                        'filename' => $attachmentData['filename'],
-                        'content_id' => $attachmentData['content_id'],
-                        'content_size' => strlen($content),
-                    ]);
                 } else {
                     // Regular attachment - download it
                     $content = $this->downloadGmailAttachment($emailAccount, $attachmentData);

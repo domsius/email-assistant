@@ -46,6 +46,18 @@ Route::middleware(['auth:sanctum'])->group(function () {
 // OAuth callback routes (public - no auth required)
 Route::get('/email-accounts/oauth/callback/{provider}', [App\Http\Controllers\Api\EmailAccountController::class, 'handleOAuthCallback']);
 
+// Gmail Push Notification via Pub/Sub (public - Google Pub/Sub will call this)
+Route::post('/webhooks/gmail/pubsub', [App\Http\Controllers\Webhooks\GmailPubSubController::class, 'handlePushNotification'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+Route::get('/webhooks/gmail/health', [App\Http\Controllers\Webhooks\GmailPubSubController::class, 'health'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+
+// Legacy direct webhook (kept for compatibility)
+Route::post('/webhooks/gmail', [App\Http\Controllers\Webhooks\GmailWebhookController::class, 'handleNotification'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+Route::get('/webhooks/gmail/verify', [App\Http\Controllers\Webhooks\GmailWebhookController::class, 'verify'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+
 // Email sync routes (for inbox operations)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/emails/sync', function (Request $request) {

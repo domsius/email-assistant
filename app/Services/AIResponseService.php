@@ -13,7 +13,7 @@ use OpenAI;
 
 class AIResponseService extends BaseService
 {
-    private $client;
+    private $client = null;
 
     private string $model;
 
@@ -21,18 +21,40 @@ class AIResponseService extends BaseService
 
     private ?int $customMaxTokens = null;
 
+    private bool $isConfigured = false;
+
     public function __construct()
     {
         parent::__construct();
 
         $apiKey = config('services.openai.api_key');
 
-        if (! $apiKey) {
+        if ($apiKey) {
+            $this->client = OpenAI::client($apiKey);
+            $this->model = config('services.openai.model', 'gpt-4o-mini');
+            $this->isConfigured = true;
+        } else {
+            $this->model = config('services.openai.model', 'gpt-4o-mini');
+            Log::warning('OpenAI API key not configured - AI features will be disabled');
+        }
+    }
+
+    /**
+     * Check if the AI service is properly configured
+     */
+    public function isConfigured(): bool
+    {
+        return $this->isConfigured;
+    }
+
+    /**
+     * Ensure the service is configured before use
+     */
+    private function ensureConfigured(): void
+    {
+        if (!$this->isConfigured) {
             throw new Exception('OpenAI API key not configured');
         }
-
-        $this->client = OpenAI::client($apiKey);
-        $this->model = config('services.openai.model', 'gpt-4o-mini');
     }
 
     /**
@@ -42,6 +64,8 @@ class AIResponseService extends BaseService
      */
     public function generateResponse(EmailMessage $emailMessage, ?User $user = null): array
     {
+        $this->ensureConfigured();
+        
         return $this->executeWithRetry(
             function () use ($emailMessage, $user) {
                 // Build context for the AI
@@ -502,6 +526,8 @@ class AIResponseService extends BaseService
         string $tone = 'professional',
         string $style = 'conversational'
     ): array {
+        $this->ensureConfigured();
+        
         return $this->executeWithRetry(
             function () use ($emailMessage, $context, $tone, $style) {
                 // Parse cursor position from context
@@ -568,6 +594,8 @@ class AIResponseService extends BaseService
         string $tone = 'professional',
         string $style = 'conversational'
     ): array {
+        $this->ensureConfigured();
+        
         return $this->executeWithRetry(
             function () use ($context, $subject, $recipient, $user, $tone, $style) {
                 // Parse cursor position from context
@@ -636,6 +664,8 @@ class AIResponseService extends BaseService
      */
     public function analyzeEmotion(EmailMessage $emailMessage): array
     {
+        $this->ensureConfigured();
+        
         try {
             $completion = $this->client->chat()->create([
                 'model' => $this->model,

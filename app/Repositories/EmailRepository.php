@@ -54,25 +54,12 @@ class EmailRepository
         // Convert cursor (page number) to integer
         $page = $cursor ? (int) $cursor : null;
 
-        // Log the query for debugging
-        Log::info('Email query SQL:', [
-            'sql' => $query->toSql(),
-            'bindings' => $query->getBindings(),
-        ]);
-
         $paginator = $query->orderBy('received_at', 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
 
         // Log first email data
         if ($paginator->count() > 0) {
             $firstEmail = $paginator->first();
-            Log::info('First paginated email:', [
-                'id' => $firstEmail->id,
-                'has_body_content' => ! empty($firstEmail->body_content),
-                'has_body_html' => ! empty($firstEmail->body_html),
-                'has_body_plain' => ! empty($firstEmail->body_plain),
-                'body_content_length' => strlen($firstEmail->body_content ?? ''),
-            ]);
         }
 
         // Only append necessary query parameters, excluding Inertia-specific ones

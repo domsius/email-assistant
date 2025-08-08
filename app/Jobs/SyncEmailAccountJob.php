@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\EmailsUpdated;
 use App\Models\EmailAccount;
 use App\Services\EmailSyncService;
 use Illuminate\Bus\Queueable;
@@ -55,23 +56,20 @@ class SyncEmailAccountJob implements ShouldQueue
      */
     public function handle(EmailSyncService $syncService): void
     {
-        Log::info('Starting email sync job', [
-            'account_id' => $this->emailAccount->id,
-            'email' => $this->emailAccount->email_address,
-            'options' => $this->options,
-        ]);
-
         try {
             // Use optimized sync method
             $result = $syncService->syncEmailsOptimized($this->emailAccount, $this->options);
 
             if ($result['success']) {
-                Log::info('Email sync job completed successfully', [
-                    'account_id' => $this->emailAccount->id,
-                    'processed' => $result['processed'],
-                    'skipped' => $result['skipped'],
-                    'has_more' => $result['has_more'] ?? false,
-                ]);
+                // Broadcast that emails have been updated
+                event(new EmailsUpdated(
+                    $this->emailAccount->company_id,
+                    $this->emailAccount->id,
+                    [
+                        'processed' => $result['processed'] ?? 0,
+                        'has_more' => $result['has_more'] ?? false,
+                    ]
+                ));
 
                 // If there are more emails to sync, dispatch another job
                 if ($result['has_more'] ?? false) {
