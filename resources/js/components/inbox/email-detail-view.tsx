@@ -36,7 +36,7 @@ interface EmailDetailViewProps {
 
 interface ReplyState {
   isReplying: boolean;
-  replyType: "reply" | "replyAll" | "forward" | null;
+  replyType: "reply" | "replyAll" | "forward" | "draft" | null;
   to: string;
   cc: string;
   subject: string;
@@ -59,39 +59,25 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [replySignature, setReplySignature] = useState<string>("");
   
-  // If this is a draft, open it in compose mode immediately
+  // If this is a draft, set up reply state for editing
   useEffect(() => {
     if (email.isDraft) {
-      // Find the from address for the draft
-      let defaultFrom = "";
-      if (email.emailAccountId) {
-        const account = emailAccounts.find((acc: any) => 
-          acc.id === email.emailAccountId || acc.id === email.emailAccountId.toString()
-        );
-        if (account) {
-          defaultFrom = account.email;
-        }
-      }
-      
-      enterComposeMode({
+      // Set up the reply state with draft data
+      setReplyState({
+        isReplying: true,
+        replyType: "draft" as any, // Using "draft" as a special type
         to: email.to || email.recipients || "",
         cc: email.cc || email.cc_recipients || "",
-        bcc: email.bcc || email.bcc_recipients || "",
         subject: email.subject || "",
-        body: email.body_content || email.content || email.plainTextContent || "",
-        action: email.action || "draft",
-        draftId: email.draftId || email.id,
-        originalEmail: email.originalEmail,
-        defaultFrom: defaultFrom || email.from,
+        body: email.body_content || email.content || email.plainTextContent || ""
       });
-      // Go back to list after entering compose mode
-      onBackToList();
     }
-  }, [email.isDraft, emailAccounts]);
+  }, [email.isDraft]);
   
-  // Fetch signature when starting a reply
+  // Fetch signature when starting a reply (but not for drafts which already have signatures)
   useEffect(() => {
-    if (replyState.isReplying && replyState.replyType !== "forward" && emailAccounts.length > 0) {
+    // Skip signature loading for drafts - they already have their signature
+    if (replyState.isReplying && replyState.replyType !== "forward" && replyState.replyType !== "draft" && emailAccounts.length > 0) {
       // Get the email account that received this email
       // First, try to find by email_account_id if available
       let recipientAccount = null;
@@ -153,7 +139,19 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
               
               setReplySignature(sanitizedSignature);
               
-              const newBody = SignatureService.insertSignature(replyState.body, sanitizedSignature);
+              // Insert signature before the citation/quoted text
+              let newBody = replyState.body;
+              if (replyState.body.includes('<div style="border-left:')) {
+                // Insert signature before the citation
+                newBody = sanitizedSignature + replyState.body;
+              } else if (replyState.body.includes('---------- Forwarded message')) {
+                // Insert signature before the forwarded message
+                newBody = sanitizedSignature + replyState.body;
+              } else {
+                // Normal signature insertion
+                newBody = SignatureService.insertSignature(replyState.body, sanitizedSignature);
+              }
+              
               setReplyState(prev => ({
                 ...prev,
                 body: newBody
@@ -175,19 +173,39 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
   const handleReply = useCallback((type: "reply" | "replyAll" | "forward") => {
     let defaultTo = "";
     let defaultSubject = "";
+    let defaultBody = "";
+    
+    // Format the original email as a citation
+    const formatDate = (date: string) => {
+      return format(new Date(date), "EEEE, MMMM d, yyyy 'at' h:mm a");
+    };
+    
+    const originalEmailCitation = `<br><br><div style="border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">
+On ${formatDate(email.receivedAt || email.date || new Date().toISOString())}, ${email.sender} &lt;${email.senderEmail}&gt; wrote:<br><br>
+${email.content || email.plainTextContent || email.snippet || ""}
+</div>`;
     
     switch (type) {
       case "reply":
         defaultTo = email.senderEmail;
         defaultSubject = email.subject.startsWith("Re: ") ? email.subject : `Re: ${email.subject}`;
+        defaultBody = originalEmailCitation;
         break;
       case "replyAll":
         defaultTo = email.senderEmail;
         defaultSubject = email.subject.startsWith("Re: ") ? email.subject : `Re: ${email.subject}`;
+        defaultBody = originalEmailCitation;
         break;
       case "forward":
         defaultTo = "";
         defaultSubject = email.subject.startsWith("Fwd: ") ? email.subject : `Fwd: ${email.subject}`;
+        // For forward, include the original email details in the body
+        defaultBody = `<br><br>---------- Forwarded message ----------<br>
+From: ${email.sender} &lt;${email.senderEmail}&gt;<br>
+Date: ${formatDate(email.receivedAt || email.date || new Date().toISOString())}<br>
+Subject: ${email.subject}<br>
+To: ${email.to || ""}<br><br>
+${email.content || email.plainTextContent || email.snippet || ""}`;
         break;
     }
     
@@ -197,7 +215,7 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
       to: defaultTo,
       cc: "",
       subject: defaultSubject,
-      body: ""
+      body: defaultBody
     });
   }, [email]);
 
@@ -275,19 +293,43 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
 
   const handleSendReply = useCallback(() => {
     // Use the existing compose functionality
-    enterComposeMode({
+    const composeData: any = {
       to: replyState.to,
       cc: replyState.cc,
       subject: replyState.subject,
       body: replyState.body,
-      action: replyState.replyType || "reply",
-      inReplyTo: email.id.toString(),
-      originalEmail: email,
-    });
+      action: replyState.replyType === 'draft' ? 'draft' : (replyState.replyType || "reply"),
+    };
+
+    // For drafts, include the draft ID and original email if exists
+    if (email.isDraft) {
+      composeData.draftId = email.draftId || email.id;
+      if (email.originalEmail) {
+        composeData.originalEmail = email.originalEmail;
+        composeData.inReplyTo = email.originalEmail.id?.toString();
+      }
+      // Find the from address for the draft
+      let defaultFrom = "";
+      if (email.emailAccountId) {
+        const account = emailAccounts.find((acc: any) => 
+          acc.id === email.emailAccountId || acc.id === email.emailAccountId.toString()
+        );
+        if (account) {
+          defaultFrom = account.email;
+        }
+      }
+      composeData.defaultFrom = defaultFrom || email.from;
+    } else {
+      // For regular replies
+      composeData.inReplyTo = email.id.toString();
+      composeData.originalEmail = email;
+    }
+
+    enterComposeMode(composeData);
     
     // Reset reply state
     handleCancelReply();
-  }, [replyState, email, enterComposeMode, handleCancelReply]);
+  }, [replyState, email, enterComposeMode, handleCancelReply, emailAccounts]);
 
   const handleGenerateAI = async () => {
     if (!email || !email.id) {
@@ -331,25 +373,52 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
       }
 
       if (aiContent) {
-        // Preserve existing signature if present
+        // Preserve existing signature and citation
         const currentBody = replyState.body || "";
         
         // Look for existing signature
         const signaturePattern = /<div[^>]*class="[^"]*email-signature[^"]*"[^>]*>[\s\S]*$/i;
         const signatureMatch = currentBody.match(signaturePattern);
         
+        // Look for existing citation (reply quote)
+        const citationPattern = /<div style="border-left:[^"]*"[^>]*>[\s\S]*$/i;
+        const citationMatch = currentBody.match(citationPattern);
+        
+        // Look for forwarded message
+        const forwardPattern = /---------- Forwarded message ----------[\s\S]*$/i;
+        const forwardMatch = currentBody.match(forwardPattern);
+        
         let finalBody = aiContent;
-        if (signatureMatch) {
-          // Found signature, append it to AI content
-          console.log("Preserving signature:", signatureMatch[0].substring(0, 100));
+        
+        // Remove any existing signature from AI content (shouldn't have one, but just in case)
+        finalBody = finalBody.replace(signaturePattern, '');
+        
+        // Build the final body: AI content + signature + citation/forward
+        if (signatureMatch && (citationMatch || forwardMatch)) {
+          // We have both signature and citation/forward - arrange them properly
+          console.log("Preserving signature and citation/forward");
           
-          // Remove any signature from AI content first (shouldn't have one, but just in case)
-          finalBody = aiContent.replace(signaturePattern, '');
-          
-          // Append the existing signature
+          // Add signature after AI content
           finalBody = finalBody + '<br><br>' + signatureMatch[0];
-        } else {
-          console.log("No signature found in current body");
+          
+          // Add citation/forward after signature
+          if (citationMatch) {
+            finalBody = finalBody + citationMatch[0];
+          } else if (forwardMatch) {
+            finalBody = finalBody + '<br><br>' + forwardMatch[0];
+          }
+        } else if (signatureMatch) {
+          // Only signature, no citation
+          console.log("Preserving signature only");
+          finalBody = finalBody + '<br><br>' + signatureMatch[0];
+        } else if (citationMatch || forwardMatch) {
+          // Only citation/forward, no signature (shouldn't happen normally)
+          console.log("Preserving citation/forward only");
+          if (citationMatch) {
+            finalBody = finalBody + citationMatch[0];
+          } else if (forwardMatch) {
+            finalBody = finalBody + '<br><br>' + forwardMatch[0];
+          }
         }
         
         setReplyState(prev => ({ ...prev, body: finalBody }));
@@ -375,10 +444,7 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
       .slice(0, 2);
   };
 
-  // Don't render anything if this is a draft (it will open in compose mode)
-  if (email.isDraft) {
-    return null;
-  }
+  // For drafts, we'll show a modified view similar to reply mode
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -488,18 +554,20 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
             </div>
           )}
 
-          {/* Email Body */}
-          <div className="prose prose-sm max-w-none mb-8">
-            <div 
-              className="email-content"
-              dangerouslySetInnerHTML={{ 
-                __html: email.content || email.plainTextContent || email.snippet || "No content available" 
-              }} 
-            />
-          </div>
+          {/* Email Body - Don't show for drafts since they're being edited */}
+          {!email.isDraft && (
+            <div className="prose prose-sm max-w-none mb-8">
+              <div 
+                className="email-content"
+                dangerouslySetInnerHTML={{ 
+                  __html: email.content || email.plainTextContent || email.snippet || "No content available" 
+                }} 
+              />
+            </div>
+          )}
 
-          {/* Action Buttons */}
-          {!replyState.isReplying && (
+          {/* Action Buttons - Don't show for drafts */}
+          {!replyState.isReplying && !email.isDraft && (
             <div className="flex items-center gap-2 mb-6">
               <Button 
                 variant="outline" 
@@ -533,7 +601,7 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
             <div className="border rounded-lg p-4 bg-white">
               <div className="mb-4">
                 <h3 className="font-semibold mb-3 capitalize">
-                  {replyState.replyType} to {email.sender}
+                  {replyState.replyType === 'draft' ? 'Edit Draft' : `${replyState.replyType} to ${email.sender}`}
                 </h3>
                 
                 <div className="space-y-3">

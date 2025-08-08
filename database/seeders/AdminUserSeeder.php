@@ -50,7 +50,7 @@ class AdminUserSeeder extends Seeder
         $admin = User::create([
             'name' => 'Admin User',
             'email' => $adminEmail,
-            'password' => Hash::make('admin123456'), // Change this in production!
+            'password' => Hash::make('password'), // Change this in production!
             'company_id' => $company->id,
             'role' => 'admin',
             'department' => 'Administration',
@@ -60,14 +60,14 @@ class AdminUserSeeder extends Seeder
 
         $this->command->info('Admin user created successfully!');
         $this->command->info('Email: ' . $adminEmail);
-        $this->command->info('Password: admin123456');
+        $this->command->info('Password: password');
         $this->command->warn('IMPORTANT: Please change the admin password after first login!');
         
         $this->createSamplePrompts($admin, $company);
     }
     
     /**
-     * Create sample global AI prompts
+     * Create sample AI prompts
      */
     private function createSamplePrompts(User $admin, Company $company): void
     {
@@ -98,6 +98,6 @@ class AdminUserSeeder extends Seeder
             ],
         ]);
         
-        $this->command->info('Sample global AI prompts created for admin.');
+        $this->command->info('Sample AI prompts created for admin.');
     }
 }

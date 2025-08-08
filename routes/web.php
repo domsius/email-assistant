@@ -64,6 +64,32 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     })->middleware(['auth', 'verified']);
 
+    // Debug route to check drafts encoding - REMOVE IN PRODUCTION
+    Route::get('/debug/drafts-encoding', function () {
+        $drafts = \App\Models\EmailDraft::select('id', 'subject', 'body')
+            ->limit(5)
+            ->get();
+        
+        $result = [];
+        foreach ($drafts as $draft) {
+            $result[] = [
+                'id' => $draft->id,
+                'subject' => $draft->subject,
+                'subject_encoding' => mb_detect_encoding($draft->subject),
+                'body_length' => strlen($draft->body),
+                'body_sample' => substr($draft->body, 0, 100),
+                'body_encoding' => mb_detect_encoding($draft->body),
+                'has_special_chars' => preg_match('/[^\x00-\x7F]/', $draft->body) ? 'yes' : 'no',
+            ];
+        }
+        
+        return response()->json([
+            'drafts' => $result,
+            'database_charset' => config('database.connections.mysql.charset'),
+            'database_collation' => config('database.connections.mysql.collation'),
+        ]);
+    })->middleware(['auth', 'verified']);
+
     // Debug route to test delete - REMOVE IN PRODUCTION
     Route::get('/debug/test-delete/{emailId}', function ($emailId) {
         $email = \App\Models\EmailMessage::find($emailId);
@@ -123,7 +149,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/emails/{emailId}/toggle-star', [\App\Http\Controllers\EmailOperationsController::class, 'toggleStar'])->name('emails.toggle-star');
 
-    Route::get('/api/emails/{emailId}', [\App\Http\Controllers\EmailOperationsController::class, 'show'])->name('emails.show');
+    Route::get('/emails/{emailId}', [\App\Http\Controllers\EmailOperationsController::class, 'show'])->name('emails.show');
     
     // Inline image route (for authenticated session access)
     Route::get('/emails/{email}/inline/{contentId}', [\App\Http\Controllers\Api\EmailController::class, 'getInlineImage'])->name('emails.inline-image');
@@ -141,13 +167,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/emails/send', [\App\Http\Controllers\ComposeController::class, 'send'])->name('emails.send');
 });
 
-// Admin routes
+// Prompts routes (admin only)
+Route::middleware(['auth', 'verified', \App\Http\Middleware\IsAdmin::class])->group(function () {
+    Route::get('/prompts', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'index'])->name('prompts');
+    Route::post('/prompts', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'store'])->name('prompts.store');
+    Route::put('/prompts/{prompt}', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'update'])->name('prompts.update');
+    Route::delete('/prompts/{prompt}', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'destroy'])->name('prompts.destroy');
+    Route::post('/prompts/{prompt}/toggle-active', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'toggleActive'])->name('prompts.toggle-active');
+});
+
+
+// Empty admin routes group (can be used for other admin routes in the future)
 Route::middleware(['auth', 'verified', \App\Http\Middleware\IsAdmin::class])->prefix('admin')->group(function () {
-    Route::get('/global-prompts', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'index'])->name('admin.global-prompts');
-    Route::post('/global-prompts', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'store'])->name('admin.global-prompts.store');
-    Route::put('/global-prompts/{prompt}', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'update'])->name('admin.global-prompts.update');
-    Route::delete('/global-prompts/{prompt}', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'destroy'])->name('admin.global-prompts.destroy');
-    Route::post('/global-prompts/{prompt}/toggle-active', [\App\Http\Controllers\Admin\GlobalAIPromptController::class, 'toggleActive'])->name('admin.global-prompts.toggle-active');
+    // Future admin routes can go here
 });
 
 require __DIR__.'/settings.php';

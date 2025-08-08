@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import {
   Bold,
   Italic,
@@ -13,6 +13,7 @@ import {
   AlignCenter,
   AlignRight,
   Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,15 +32,26 @@ interface EmailEditorProps {
   placeholder?: string;
   className?: string;
   minHeight?: string;
+  onGenerateAI?: (context: string) => Promise<string>;
 }
 
-export function EmailEditor({
-  content,
-  onChange,
-  placeholder = 'Write your message...',
-  className,
-  minHeight = '200px',
-}: EmailEditorProps) {
+export interface EmailEditorRef {
+  insertAtCursor: (text: string) => void;
+  getSelectedText: () => string;
+  getContext: () => { before: string; after: string; selected: string };
+}
+
+export const EmailEditor = forwardRef<EmailEditorRef, EmailEditorProps>((
+  {
+    content,
+    onChange,
+    placeholder = 'Write your message...',
+    className,
+    minHeight = '200px',
+    onGenerateAI,
+  },
+  ref
+) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const [isEmpty, setIsEmpty] = useState(!content || content === '<p></p>' || content === '<br>');
   const [selection, setSelection] = useState<Range | null>(null);
@@ -47,6 +59,8 @@ export function EmailEditor({
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [savedRange, setSavedRange] = useState<Range | null>(null);
 
   // Initialize editor with content
   useEffect(() => {
@@ -362,6 +376,102 @@ export function EmailEditor({
     }
   };
 
+  // Insert text at cursor position
+  const insertAtCursor = (text: string) => {
+    editorRef.current?.focus();
+    
+    // Try to restore saved range if available
+    if (savedRange) {
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      }
+    }
+    
+    // Insert the text
+    document.execCommand('insertHTML', false, text);
+    
+    // Update content
+    if (editorRef.current) {
+      const html = editorRef.current.innerHTML;
+      onChange(html);
+      setIsEmpty(!html || html === '<br>' || html === '<p></p>');
+      addToHistory(html);
+    }
+  };
+
+  // Get selected text
+  const getSelectedText = (): string => {
+    const sel = window.getSelection();
+    return sel ? sel.toString() : '';
+  };
+
+  // Get context around cursor
+  const getContext = (): { before: string; after: string; selected: string } => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !editorRef.current) {
+      return { before: '', after: '', selected: '' };
+    }
+
+    const range = sel.getRangeAt(0);
+    const selected = sel.toString();
+    
+    // Get text before cursor (up to 500 chars)
+    const beforeRange = document.createRange();
+    beforeRange.setStart(editorRef.current, 0);
+    beforeRange.setEnd(range.startContainer, range.startOffset);
+    const beforeText = beforeRange.toString().slice(-500);
+    
+    // Get text after cursor (up to 500 chars)
+    const afterRange = document.createRange();
+    afterRange.setStart(range.endContainer, range.endOffset);
+    afterRange.setEndAfter(editorRef.current.lastChild || editorRef.current);
+    const afterText = afterRange.toString().slice(0, 500);
+    
+    return { before: beforeText, after: afterText, selected };
+  };
+
+  // Handle AI generation
+  const handleGenerateAI = async () => {
+    if (!onGenerateAI || isGeneratingAI) return;
+    
+    setIsGeneratingAI(true);
+    
+    // Save current selection/cursor position
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      setSavedRange(sel.getRangeAt(0).cloneRange());
+    }
+    
+    try {
+      const context = getContext();
+      const contextString = `${context.before}[CURSOR]${context.selected}[/CURSOR]${context.after}`;
+      
+      // Call the AI generation function
+      const generatedText = await onGenerateAI(contextString);
+      
+      if (generatedText) {
+        // If there's selected text, replace it; otherwise insert at cursor
+        if (context.selected) {
+          document.execCommand('delete', false);
+        }
+        insertAtCursor(generatedText);
+      }
+    } catch (error) {
+      console.error('AI generation failed:', error);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    insertAtCursor,
+    getSelectedText,
+    getContext,
+  }));
+
   // Custom undo function
   const handleUndo = () => {
     if (historyIndex > 0) {
@@ -564,6 +674,25 @@ export function EmailEditor({
 
           <Separator orientation="vertical" className="h-6" />
 
+          {/* AI Generate */}
+          {onGenerateAI && (
+            <>
+              <Button
+                variant={isGeneratingAI ? 'secondary' : 'ghost'}
+                size="sm"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleGenerateAI}
+                className="h-8 gap-1 px-2"
+                disabled={isGeneratingAI}
+                title="Generate with AI (at cursor position)"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span className="text-xs">{isGeneratingAI ? 'Generating...' : 'AI'}</span>
+              </Button>
+              <Separator orientation="vertical" className="h-6" />
+            </>
+          )}
+
           {/* Quote */}
           <Button
             variant="ghost"
@@ -669,7 +798,9 @@ export function EmailEditor({
       )}
     </div>
   );
-}
+});
+
+EmailEditor.displayName = 'EmailEditor';
 
 // Export for backward compatibility
 export default EmailEditor;

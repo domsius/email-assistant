@@ -25,6 +25,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // AI Processing routes
     Route::post('emails/{email}/generate-response', [EmailController::class, 'generateResponse']);
+    Route::post('emails/{email}/generate-partial', [EmailController::class, 'generatePartial']);
+    Route::post('ai/generate-text', [EmailController::class, 'generateText']);
     Route::post('emails/{email}/analyze', [EmailController::class, 'analyze']);
     
     // Attachment routes

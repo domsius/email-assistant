@@ -95,6 +95,7 @@ class InboxController extends Controller
                 $selectedAccountId ? (int) $selectedAccountId : null
             );
 
+            // Ensure proper JSON encoding for UTF-8 content
             return Inertia::render('inbox', [
                 'emails' => $emailsData['data'],
                 'emailAccounts' => $emailAccounts,
@@ -107,7 +108,7 @@ class InboxController extends Controller
                     'links' => $emailsData['links'],
                     'meta' => $emailsData['meta'],
                 ],
-            ]);
+            ])->withViewData(['json_encode_options' => JSON_UNESCAPED_UNICODE]);
         } catch (\Exception $e) {
             Log::error('Failed to load inbox', [
                 'user_id' => $user->id,

@@ -16,9 +16,9 @@ class AIResponseService extends BaseService
     private $client;
 
     private string $model;
-    
+
     private ?float $customTemperature = null;
-    
+
     private ?int $customMaxTokens = null;
 
     public function __construct()
@@ -58,7 +58,7 @@ class AIResponseService extends BaseService
 
                 // Apply global admin prompts if available (both general and RAG)
                 $globalPrompts = $this->getGlobalPrompts($emailMessage, ! empty($sources));
-                if (!empty($globalPrompts)) {
+                if (! empty($globalPrompts)) {
                     foreach ($globalPrompts as $globalPrompt) {
                         Log::info('Global prompt found', [
                             'prompt_id' => $globalPrompt->id,
@@ -91,17 +91,17 @@ class AIResponseService extends BaseService
                         'temperature' => $this->customTemperature ?? 0.7,
                         'max_tokens' => $this->customMaxTokens ?? 1000,
                     ];
-                    
+
                     // Reset custom values after use
                     $this->customTemperature = null;
                     $this->customMaxTokens = null;
-                    
+
                     return $this->client->chat()->create($params);
                 }, 'OpenAI API call');
 
                 $completion = $apiResult['result'];
                 $response = $completion->choices[0]->message->content;
-                
+
                 // Convert plain text response to HTML format
                 $response = $this->formatResponseAsHTML($response);
 
@@ -430,13 +430,13 @@ class AIResponseService extends BaseService
     {
         $companyId = $emailMessage->emailAccount->company_id;
         $prompts = [];
-        
+
         // Always get general prompt if available
         $generalPrompt = GlobalAIPrompt::getActivePromptForCompany($companyId, 'general');
         if ($generalPrompt) {
             $prompts[] = $generalPrompt;
         }
-        
+
         // If RAG sources are available, also get RAG-enhanced prompt
         if ($hasRAGSources) {
             $ragPrompt = GlobalAIPrompt::getActiveRAGPromptForCompany($companyId);
@@ -444,7 +444,7 @@ class AIResponseService extends BaseService
                 $prompts[] = $ragPrompt;
             }
         }
-        
+
         return $prompts;
     }
 
@@ -453,43 +453,182 @@ class AIResponseService extends BaseService
      */
     private function mergeWithGlobalPrompt(string $systemPrompt, GlobalAIPrompt $globalPrompt): string
     {
-        $mergedPrompt = "";
-        
+        $mergedPrompt = '';
+
         // Add global prompt header with type
         $promptType = strtoupper(str_replace('_', ' ', $globalPrompt->prompt_type));
         $mergedPrompt .= "=== {$promptType} GLOBAL INSTRUCTIONS (MANDATORY) ===\n";
-        $mergedPrompt .= $globalPrompt->prompt_content . "\n";
+        $mergedPrompt .= $globalPrompt->prompt_content."\n";
         $mergedPrompt .= "=== END OF {$promptType} INSTRUCTIONS ===\n\n";
-        
+
         // Add the original system prompt
         $mergedPrompt .= $systemPrompt;
-        
+
         Log::info('Merged prompt created', [
             'global_prompt_content' => $globalPrompt->prompt_content,
             'merged_prompt_preview' => substr($mergedPrompt, 0, 500),
         ]);
-        
+
         // Apply any custom settings from global prompt
         if ($globalPrompt->settings) {
             $settings = $globalPrompt->settings;
-            
+
             // Add any additional instructions based on settings
             if (isset($settings['temperature'])) {
                 // Temperature will be used in the API call
                 $this->customTemperature = $settings['temperature'];
             }
-            
+
             if (isset($settings['max_tokens'])) {
                 $this->customMaxTokens = $settings['max_tokens'];
             }
-            
+
             if (isset($settings['additional_instructions'])) {
                 $mergedPrompt .= "\n\nADDITIONAL INSTRUCTIONS:\n";
                 $mergedPrompt .= $settings['additional_instructions'];
             }
         }
-        
+
         return $mergedPrompt;
+    }
+
+    /**
+     * Generate partial text at cursor position
+     */
+    public function generatePartialText(
+        EmailMessage $emailMessage,
+        string $context,
+        ?User $user,
+        string $tone = 'professional',
+        string $style = 'conversational'
+    ): array {
+        return $this->executeWithRetry(
+            function () use ($emailMessage, $context, $tone, $style) {
+                // Parse cursor position from context
+                $cursorPattern = '/(.*)\\[CURSOR\\](.*)\\[\\/CURSOR\\](.*)/s';
+                preg_match($cursorPattern, $context, $matches);
+
+                $beforeCursor = $matches[1] ?? substr($context, 0, 500);
+                $selectedText = $matches[2] ?? '';
+                $afterCursor = $matches[3] ?? '';
+
+                // Build prompt for partial generation
+                $systemPrompt = 'You are an AI assistant helping to write email content. ';
+                $systemPrompt .= 'Generate a continuation or replacement for the text at the cursor position. ';
+                $systemPrompt .= "Tone: {$tone}. Style: {$style}. ";
+                $systemPrompt .= 'Language: '.$this->getLanguageName($emailMessage->detected_language).'. ';
+                $systemPrompt .= 'Important: Generate ONLY the text to insert, without any explanations or metadata. ';
+                $systemPrompt .= 'The text should flow naturally with the existing content. ';
+
+                // Apply global prompts if available
+                $globalPrompts = $this->getGlobalPrompts($emailMessage, false);
+                foreach ($globalPrompts as $globalPrompt) {
+                    $systemPrompt = $this->mergeWithGlobalPrompt($systemPrompt, $globalPrompt);
+                }
+
+                $userPrompt = "Context before cursor: {$beforeCursor}\n";
+                if ($selectedText) {
+                    $userPrompt .= "Selected text to replace: {$selectedText}\n";
+                }
+                $userPrompt .= "Context after cursor: {$afterCursor}\n";
+                $userPrompt .= "\nGenerate appropriate text to insert at the cursor position.";
+
+                $completion = $this->client->chat()->create([
+                    'model' => $this->model,
+                    'messages' => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => $userPrompt],
+                    ],
+                    'temperature' => 0.7,
+                    'max_tokens' => 200,
+                ]);
+
+                $generatedText = $completion->choices[0]->message->content;
+
+                return [
+                    'text' => $generatedText,
+                    'confidence' => 0.85,
+                ];
+            },
+            'Partial text generation',
+            ['email_id' => $emailMessage->id],
+            2,
+            1000
+        );
+    }
+
+    /**
+     * Generate text from context without email reference
+     */
+    public function generateTextFromContext(
+        string $context,
+        ?string $subject,
+        ?string $recipient,
+        ?User $user,
+        string $tone = 'professional',
+        string $style = 'conversational'
+    ): array {
+        return $this->executeWithRetry(
+            function () use ($context, $subject, $recipient, $user, $tone, $style) {
+                // Parse cursor position from context
+                $cursorPattern = '/(.*)\\[CURSOR\\](.*)\\[\\/CURSOR\\](.*)/s';
+                preg_match($cursorPattern, $context, $matches);
+
+                $beforeCursor = $matches[1] ?? substr($context, 0, 500);
+                $selectedText = $matches[2] ?? '';
+                $afterCursor = $matches[3] ?? '';
+
+                // Build prompt
+                $systemPrompt = 'You are an AI assistant helping to compose professional emails. ';
+                $systemPrompt .= 'Generate appropriate text for the cursor position. ';
+                $systemPrompt .= "Tone: {$tone}. Style: {$style}. ";
+                if ($subject) {
+                    $systemPrompt .= "Email subject: {$subject}. ";
+                }
+                if ($recipient) {
+                    $systemPrompt .= "Recipient: {$recipient}. ";
+                }
+                $systemPrompt .= 'Important: Generate ONLY the text to insert, without any explanations. ';
+                $systemPrompt .= 'The text should flow naturally with the existing content. ';
+
+                // Get company-wide prompts if user is available
+                if ($user) {
+                    $companyId = $user->company_id;
+                    $generalPrompt = GlobalAIPrompt::getActivePromptForCompany($companyId, 'general');
+                    if ($generalPrompt) {
+                        $systemPrompt = $this->mergeWithGlobalPrompt($systemPrompt, $generalPrompt);
+                    }
+                }
+
+                $userPrompt = "Context before cursor: {$beforeCursor}\n";
+                if ($selectedText) {
+                    $userPrompt .= "Selected text to replace: {$selectedText}\n";
+                }
+                $userPrompt .= "Context after cursor: {$afterCursor}\n";
+                $userPrompt .= "\nGenerate appropriate text to insert at the cursor position.";
+
+                $completion = $this->client->chat()->create([
+                    'model' => $this->model,
+                    'messages' => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => $userPrompt],
+                    ],
+                    'temperature' => 0.7,
+                    'max_tokens' => 200,
+                ]);
+
+                $generatedText = $completion->choices[0]->message->content;
+
+                return [
+                    'text' => $generatedText,
+                    'confidence' => 0.8,
+                ];
+            },
+            'Text generation from context',
+            [],
+            2,
+            1000
+        );
     }
 
     /**
@@ -537,7 +676,7 @@ class AIResponseService extends BaseService
             ];
         }
     }
-    
+
     /**
      * Format AI response as HTML with proper formatting
      */
@@ -547,17 +686,17 @@ class AIResponseService extends BaseService
         if (preg_match('/<[^>]+>/', $response)) {
             return $response;
         }
-        
+
         // Split response into paragraphs
         $paragraphs = preg_split('/\n\s*\n/', trim($response));
-        
+
         $html = '';
         foreach ($paragraphs as $paragraph) {
             $paragraph = trim($paragraph);
             if (empty($paragraph)) {
                 continue;
             }
-            
+
             // Check if this is a list item
             if (preg_match('/^[\-\*]\s+(.+)/', $paragraph, $matches)) {
                 // Convert to unordered list
@@ -565,8 +704,8 @@ class AIResponseService extends BaseService
                 $html .= '<ul>';
                 foreach ($items as $item) {
                     $item = trim(preg_replace('/^[\-\*]\s+/', '', $item));
-                    if (!empty($item)) {
-                        $html .= '<li>' . $this->formatInlineElements($item) . '</li>';
+                    if (! empty($item)) {
+                        $html .= '<li>'.$this->formatInlineElements($item).'</li>';
                     }
                 }
                 $html .= '</ul>';
@@ -576,8 +715,8 @@ class AIResponseService extends BaseService
                 $html .= '<ol>';
                 foreach ($items as $item) {
                     $item = trim(preg_replace('/^\d+\.\s+/', '', $item));
-                    if (!empty($item)) {
-                        $html .= '<li>' . $this->formatInlineElements($item) . '</li>';
+                    if (! empty($item)) {
+                        $html .= '<li>'.$this->formatInlineElements($item).'</li>';
                     }
                 }
                 $html .= '</ol>';
@@ -586,23 +725,23 @@ class AIResponseService extends BaseService
                 // Convert line breaks within paragraphs to <br>
                 $lines = explode("\n", $paragraph);
                 $formattedLines = [];
-                
+
                 foreach ($lines as $line) {
                     $line = trim($line);
-                    if (!empty($line)) {
+                    if (! empty($line)) {
                         $formattedLines[] = $this->formatInlineElements($line);
                     }
                 }
-                
+
                 if (count($formattedLines) > 0) {
-                    $html .= '<p>' . implode('<br>', $formattedLines) . '</p>';
+                    $html .= '<p>'.implode('<br>', $formattedLines).'</p>';
                 }
             }
         }
-        
+
         return $html;
     }
-    
+
     /**
      * Format inline elements like bold, italic, links
      */
@@ -610,33 +749,33 @@ class AIResponseService extends BaseService
     {
         // Escape HTML special characters first
         $text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
-        
+
         // Convert markdown-style formatting to HTML
         // Bold: **text** or __text__
         $text = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $text);
         $text = preg_replace('/__(.+?)__/', '<strong>$1</strong>', $text);
-        
+
         // Italic: *text* or _text_ (but not within words)
         $text = preg_replace('/(?<!\w)\*(.+?)\*(?!\w)/', '<em>$1</em>', $text);
         $text = preg_replace('/(?<!\w)_(.+?)_(?!\w)/', '<em>$1</em>', $text);
-        
+
         // Links: [text](url)
         $text = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>', $text);
-        
+
         // Auto-link URLs
         $text = preg_replace(
             '/(https?:\/\/[^\s<]+)/',
             '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
             $text
         );
-        
+
         // Auto-link email addresses
         $text = preg_replace(
             '/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/',
             '<a href="mailto:$1">$1</a>',
             $text
         );
-        
+
         return $text;
     }
 }

@@ -32,8 +32,8 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
   // Add admin-only menu items
   if (auth?.user?.role === 'admin') {
     sidebarNavItems.push({
-      title: "Global Prompts",
-      href: "/admin/global-prompts",
+      title: "AI Prompts",
+      href: "/prompts",
       icon: null,
     });
   }

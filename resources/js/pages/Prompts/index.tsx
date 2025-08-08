@@ -43,7 +43,7 @@ interface Props {
   isPlatformAdmin?: boolean;
 }
 
-export default function GlobalPrompts({ prompts, promptTypes, isPlatformAdmin = false }: Props) {
+export default function Prompts({ prompts, promptTypes, isPlatformAdmin = false }: Props) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<GlobalPrompt | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -77,7 +77,7 @@ export default function GlobalPrompts({ prompts, promptTypes, isPlatformAdmin = 
   };
 
   const handleCreate = () => {
-    router.post("/admin/global-prompts", formData, {
+    router.post("/prompts", formData, {
       onSuccess: () => {
         toast.success("Global AI prompt created successfully");
         setIsCreateOpen(false);
@@ -92,7 +92,7 @@ export default function GlobalPrompts({ prompts, promptTypes, isPlatformAdmin = 
   const handleUpdate = () => {
     if (!editingPrompt) return;
     
-    router.put(`/admin/global-prompts/${editingPrompt.id}`, formData, {
+    router.put(`/prompts/${editingPrompt.id}`, formData, {
       onSuccess: () => {
         toast.success("Global AI prompt updated successfully");
         setEditingPrompt(null);
@@ -105,7 +105,7 @@ export default function GlobalPrompts({ prompts, promptTypes, isPlatformAdmin = 
   };
 
   const handleDelete = (id: number) => {
-    router.delete(`/admin/global-prompts/${id}`, {
+    router.delete(`/prompts/${id}`, {
       onSuccess: () => {
         toast.success("Global AI prompt deleted successfully");
         setDeleteConfirmId(null);
@@ -117,7 +117,7 @@ export default function GlobalPrompts({ prompts, promptTypes, isPlatformAdmin = 
   };
 
   const handleToggleActive = (prompt: GlobalPrompt) => {
-    router.post(`/admin/global-prompts/${prompt.id}/toggle-active`, {}, {
+    router.post(`/prompts/${prompt.id}/toggle-active`, {}, {
       onSuccess: () => {
         toast.success(prompt.is_active ? "Prompt deactivated" : "Prompt activated");
       },
@@ -168,11 +168,11 @@ export default function GlobalPrompts({ prompts, promptTypes, isPlatformAdmin = 
 
   return (
     <AppLayout>
-      <Head title="Global AI Prompts - Admin" />
+      <Head title="AI Prompts" />
       <div className="container mx-auto px-4 py-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Global AI Prompts</h1>
+            <h1 className="text-3xl font-bold">AI Prompts</h1>
             <p className="text-muted-foreground mt-1">
               {isPlatformAdmin 
                 ? "Configure platform-wide AI response prompts that apply to all companies"

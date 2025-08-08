@@ -38,7 +38,7 @@ class GlobalAIPromptController extends Controller
                 ->get();
         }
 
-        return Inertia::render('Admin/GlobalPrompts', [
+        return Inertia::render('Prompts/index', [
             'prompts' => $prompts,
             'promptTypes' => [
                 'general' => 'General',

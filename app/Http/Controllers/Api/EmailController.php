@@ -14,8 +14,8 @@ use App\Services\AttachmentStorageService;
 use App\Services\LanguageDetectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class EmailController extends Controller
 {
@@ -102,7 +102,7 @@ class EmailController extends Controller
 
         // Handle regular email
         $email = EmailMessage::findOrFail($id);
-        
+
         // Ensure user can access this email (same company)
         if ($email->emailAccount->company_id !== auth()->user()->company_id) {
             abort(403);
@@ -129,14 +129,14 @@ class EmailController extends Controller
     private function showDraft(int $draftId): JsonResponse
     {
         $user = auth()->user();
-        
+
         $draft = EmailDraft::where('id', $draftId)
             ->where('user_id', $user->id)
             ->where('is_deleted', false)
             ->with(['emailAccount', 'originalEmail'])
             ->first();
 
-        if (!$draft) {
+        if (! $draft) {
             abort(404, 'Draft not found');
         }
 
@@ -147,7 +147,7 @@ class EmailController extends Controller
 
         // Build response with draft data and original email
         $response = [
-            'id' => 'draft-' . $draft->id,
+            'id' => 'draft-'.$draft->id,
             'subject' => $draft->subject,
             'to' => $draft->to,
             'cc' => $draft->cc,
@@ -242,6 +242,85 @@ class EmailController extends Controller
     }
 
     /**
+     * Generate partial AI text at cursor position
+     */
+    public function generatePartial(Request $request, EmailMessage $email): JsonResponse
+    {
+        $validated = $request->validate([
+            'context' => 'required|string|max:5000',
+            'tone' => 'nullable|string',
+            'style' => 'nullable|string',
+        ]);
+
+        $user = Auth::user();
+
+        try {
+            // Generate partial text based on context
+            $result = $this->aiResponseService->generatePartialText(
+                $email,
+                $validated['context'],
+                $user,
+                $validated['tone'] ?? 'professional',
+                $validated['style'] ?? 'conversational'
+            );
+
+            return response()->json([
+                'text' => $result['text'],
+                'confidence' => $result['confidence'] ?? 0.8,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'meta' => [
+                    'status' => 'error',
+                    'message' => 'Failed to generate text: '.$e->getMessage(),
+                ],
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate AI text for new compose (no email context)
+     */
+    public function generateText(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'context' => 'required|string|max:5000',
+            'subject' => 'nullable|string|max:255',
+            'recipient' => 'nullable|string|max:255',
+            'tone' => 'nullable|string',
+            'style' => 'nullable|string',
+        ]);
+
+        $user = Auth::user();
+
+        try {
+            // Generate text based on context only
+            $result = $this->aiResponseService->generateTextFromContext(
+                $validated['context'],
+                $validated['subject'] ?? null,
+                $validated['recipient'] ?? null,
+                $user,
+                $validated['tone'] ?? 'professional',
+                $validated['style'] ?? 'conversational'
+            );
+
+            return response()->json([
+                'text' => $result['text'],
+                'confidence' => $result['confidence'] ?? 0.8,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'meta' => [
+                    'status' => 'error',
+                    'message' => 'Failed to generate text: '.$e->getMessage(),
+                ],
+            ], 500);
+        }
+    }
+
+    /**
      * Analyze email for various attributes
      */
     public function analyze(AnalyzeEmailRequest $request, EmailMessage $email): JsonResponse
@@ -329,14 +408,14 @@ class EmailController extends Controller
         }
 
         // Check if we have a storage path
-        if (!$attachment->storage_path) {
+        if (! $attachment->storage_path) {
             abort(404, 'Attachment file not found');
         }
 
         // Get the file stream
         $stream = $this->attachmentStorage->getStream($attachment->storage_path);
-        
-        if (!$stream) {
+
+        if (! $stream) {
             abort(404, 'Attachment file not found');
         }
 
@@ -344,7 +423,7 @@ class EmailController extends Controller
             fpassthru($stream);
         }, 200, [
             'Content-Type' => $attachment->content_type ?? 'application/octet-stream',
-            'Content-Disposition' => 'attachment; filename="' . $attachment->filename . '"',
+            'Content-Disposition' => 'attachment; filename="'.$attachment->filename.'"',
             'Content-Length' => $attachment->size,
         ]);
     }
@@ -356,10 +435,10 @@ class EmailController extends Controller
     {
         try {
             // Load the email account relationship if not already loaded
-            if (!$email->relationLoaded('emailAccount')) {
+            if (! $email->relationLoaded('emailAccount')) {
                 $email->load('emailAccount');
             }
-            
+
             // Ensure user has access to this email
             if ($email->emailAccount->company_id !== auth()->user()->company_id) {
                 abort(403);
@@ -371,74 +450,74 @@ class EmailController extends Controller
                 ->orWhere('content_id', 'like', '%'.$contentId.'%')
                 ->first();
 
-        if (! $attachment) {
-            Log::warning('Inline image attachment not found', [
-                'email_id' => $email->id,
-                'content_id' => $contentId,
-                'total_attachments' => $email->attachments()->count(),
-                'attachment_content_ids' => $email->attachments()->pluck('content_id')->toArray(),
-            ]);
-            
-            // Return a placeholder image when attachment not found
-            return response()->stream(function () {
-                // A simple red placeholder image
-                $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAE0lEQVR42mP8/58BCiBFTAwMAJ+tCv6TvdXOAAAAAElFTkSuQmCC');
-                echo $image;
-            }, 200, [
-                'Content-Type' => 'image/png',
-                'Cache-Control' => 'public, max-age=60',
-            ]);
-        }
+            if (! $attachment) {
+                Log::warning('Inline image attachment not found', [
+                    'email_id' => $email->id,
+                    'content_id' => $contentId,
+                    'total_attachments' => $email->attachments()->count(),
+                    'attachment_content_ids' => $email->attachments()->pluck('content_id')->toArray(),
+                ]);
 
-        // Check if we have a storage path
-        if (!$attachment->storage_path) {
-            Log::warning('Inline image has no storage path', [
-                'email_id' => $email->id,
-                'attachment_id' => $attachment->id,
-                'content_id' => $contentId,
-                'filename' => $attachment->filename,
-            ]);
-            
-            // Return a placeholder if no file stored
-            return response()->stream(function () {
-                $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
-                echo $image;
-            }, 200, [
-                'Content-Type' => 'image/png',
+                // Return a placeholder image when attachment not found
+                return response()->stream(function () {
+                    // A simple red placeholder image
+                    $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAE0lEQVR42mP8/58BCiBFTAwMAJ+tCv6TvdXOAAAAAElFTkSuQmCC');
+                    echo $image;
+                }, 200, [
+                    'Content-Type' => 'image/png',
+                    'Cache-Control' => 'public, max-age=60',
+                ]);
+            }
+
+            // Check if we have a storage path
+            if (! $attachment->storage_path) {
+                Log::warning('Inline image has no storage path', [
+                    'email_id' => $email->id,
+                    'attachment_id' => $attachment->id,
+                    'content_id' => $contentId,
+                    'filename' => $attachment->filename,
+                ]);
+
+                // Return a placeholder if no file stored
+                return response()->stream(function () {
+                    $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+                    echo $image;
+                }, 200, [
+                    'Content-Type' => 'image/png',
+                    'Cache-Control' => 'public, max-age=3600',
+                ]);
+            }
+
+            // Get the file content
+            $content = $this->attachmentStorage->getContent($attachment->storage_path);
+
+            if (! $content) {
+                Log::error('Failed to read inline image file', [
+                    'email_id' => $email->id,
+                    'attachment_id' => $attachment->id,
+                    'content_id' => $contentId,
+                    'storage_path' => $attachment->storage_path,
+                    'disk' => config('mail.attachments.disk', 'local'),
+                    'base_path' => storage_path('app'),
+                    'full_path' => storage_path('app/'.$attachment->storage_path),
+                ]);
+
+                abort(404, 'Image file not found');
+            }
+
+            return response($content, 200, [
+                'Content-Type' => $attachment->content_type ?? 'image/png',
                 'Cache-Control' => 'public, max-age=3600',
+                'Content-Length' => strlen($content),
             ]);
-        }
-
-        // Get the file content
-        $content = $this->attachmentStorage->getContent($attachment->storage_path);
-        
-        if (!$content) {
-            Log::error('Failed to read inline image file', [
-                'email_id' => $email->id,
-                'attachment_id' => $attachment->id,
-                'content_id' => $contentId,
-                'storage_path' => $attachment->storage_path,
-                'disk' => config('mail.attachments.disk', 'local'),
-                'base_path' => storage_path('app'),
-                'full_path' => storage_path('app/' . $attachment->storage_path),
-            ]);
-            
-            abort(404, 'Image file not found');
-        }
-
-        return response($content, 200, [
-            'Content-Type' => $attachment->content_type ?? 'image/png',
-            'Cache-Control' => 'public, max-age=3600',
-            'Content-Length' => strlen($content),
-        ]);
         } catch (\Exception $e) {
             Log::error('Failed to get inline image', [
                 'email_id' => $email->id,
                 'content_id' => $contentId,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            
+
             // Return a generic error placeholder image
             return response()->stream(function () {
                 $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');

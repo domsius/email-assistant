@@ -139,15 +139,24 @@ class EmailService
 
         // Transform drafts to email-like structure
         $draftData = $drafts->map(function ($draft) {
+            // Ensure proper UTF-8 encoding for all text fields
+            $body = $this->ensureUtf8($draft->body);
+            $subject = $this->ensureUtf8($draft->subject);
+            $to = $this->ensureUtf8($draft->to);
+            
+            // Create snippet with proper UTF-8 handling
+            $plainText = strip_tags($body);
+            $snippet = mb_substr($plainText, 0, 100, 'UTF-8') . '...';
+            
             return [
                 'id' => 'draft-'.$draft->id, // Prefix to distinguish from emails
-                'subject' => $draft->subject ?: '(No subject)',
+                'subject' => $subject ?: '(No subject)',
                 'sender' => 'Draft',
                 'senderEmail' => $draft->emailAccount->email_address ?? 'Unknown',
                 'from' => $draft->emailAccount->email_address ?? 'Unknown',
-                'to' => $draft->to,
-                'content' => $draft->body,
-                'snippet' => substr(strip_tags($draft->body), 0, 100).'...',
+                'to' => $to,
+                'content' => $body,
+                'snippet' => $snippet,
                 'receivedAt' => $draft->last_saved_at->toIso8601String(),
                 'date' => $draft->last_saved_at->toIso8601String(),
                 'status' => 'processed',
@@ -160,10 +169,10 @@ class EmailService
                 'action' => $draft->action,
                 'originalEmail' => $draft->originalEmail ? [
                     'id' => $draft->originalEmail->id,
-                    'subject' => $draft->originalEmail->subject,
-                    'sender' => $draft->originalEmail->sender_name ?: explode('@', $draft->originalEmail->from_email)[0],
+                    'subject' => $this->ensureUtf8($draft->originalEmail->subject),
+                    'sender' => $this->ensureUtf8($draft->originalEmail->sender_name ?: explode('@', $draft->originalEmail->from_email)[0]),
                     'senderEmail' => $draft->originalEmail->from_email,
-                    'content' => $draft->originalEmail->body_html ?: $draft->originalEmail->body_plain,
+                    'content' => $this->ensureUtf8($draft->originalEmail->body_html ?: $draft->originalEmail->body_plain),
                     'receivedAt' => $draft->originalEmail->received_at->toIso8601String(),
                 ] : null,
             ];
@@ -899,5 +908,30 @@ class EmailService
             'folder' => $email->folder,
             'attachments' => $email->attachments,
         ];
+    }
+    
+    /**
+     * Ensure string is properly UTF-8 encoded
+     */
+    private function ensureUtf8(?string $text): string
+    {
+        if ($text === null) {
+            return '';
+        }
+        
+        // Check if the string is already valid UTF-8
+        if (mb_check_encoding($text, 'UTF-8')) {
+            return $text;
+        }
+        
+        // Try to detect the encoding and convert to UTF-8
+        $encoding = mb_detect_encoding($text, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ISO-8859-13'], true);
+        
+        if ($encoding && $encoding !== 'UTF-8') {
+            return mb_convert_encoding($text, 'UTF-8', $encoding);
+        }
+        
+        // If all else fails, force UTF-8 conversion removing invalid characters
+        return mb_convert_encoding($text, 'UTF-8', 'UTF-8');
     }
 }

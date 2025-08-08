@@ -21,7 +21,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useInbox } from "@/contexts/inbox-context";
-import { EmailEditor } from "@/components/ui/email-editor";
+import { EmailEditor, EmailEditorRef } from "@/components/ui/email-editor";
 import { SignatureService } from "@/services/SignatureService";
 import { toast } from "sonner";
 
@@ -81,6 +81,7 @@ export const ComposePanel = React.memo(function ComposePanel({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const emailEditorRef = useRef<EmailEditorRef>(null);
   
   // Focus on the appropriate field when component mounts
   useEffect(() => {
@@ -517,6 +518,60 @@ export const ComposePanel = React.memo(function ComposePanel({
     exitComposeMode();
   };
 
+
+  // Handle AI generation at cursor position
+  const handleAIGenerateAtCursor = async (context: string): Promise<string> => {
+    try {
+      // Determine if we're replying to an email or composing new
+      const endpoint = originalEmail 
+        ? `/api/emails/${originalEmail.id}/generate-partial`
+        : '/api/ai/generate-text';
+      
+      const requestBody = originalEmail
+        ? {
+            context,
+            tone: "professional",
+            style: "conversational",
+          }
+        : {
+            context,
+            subject: formData.subject,
+            recipient: formData.to,
+            tone: "professional",
+            style: "conversational",
+          };
+
+      const response = await authenticatedFetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Extract the generated text from response
+      if (data?.text) {
+        return data.text;
+      } else if (data?.response) {
+        return data.response;
+      } else if (data?.generated_text) {
+        return data.generated_text;
+      }
+      
+      throw new Error('No generated text in response');
+    } catch (error) {
+      console.error('Failed to generate AI text:', error);
+      toast.error('Failed to generate text with AI');
+      return '';
+    }
+  };
 
   const handleGenerateAI = async () => {
     if (!originalEmail) {
@@ -962,6 +1017,7 @@ export const ComposePanel = React.memo(function ComposePanel({
             ) : (
               <div className="h-full flex flex-col">
                 <EmailEditor
+                  ref={emailEditorRef}
                   content={formData.body}
                   onChange={(html) => {
                     handleFormChange("body", html);
@@ -970,6 +1026,7 @@ export const ComposePanel = React.memo(function ComposePanel({
                   placeholder="Write your message..."
                   className="flex-1"
                   minHeight="300px"
+                  onGenerateAI={handleAIGenerateAtCursor}
                 />
               </div>
             )}

@@ -38,7 +38,7 @@ class ShowAdminCredentials extends Command
         $this->info('================================');
         $this->line('');
         $this->info('Email: admin@example.com');
-        $this->info('Password: admin123456');
+        $this->info('Password: password');
         $this->line('');
         $this->info('Admin Panel URL: /admin/global-prompts');
         $this->line('');
