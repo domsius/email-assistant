@@ -187,11 +187,50 @@ class EmailController extends Controller
         $validated = $request->validate([
             'status' => 'in:pending,processed,ignored',
             'topic_id' => 'nullable|exists:topics,id',
+            'is_read' => 'nullable|boolean',
         ]);
 
         $email->update($validated);
 
         return response()->json($email->fresh());
+    }
+    
+    /**
+     * Mark an email as read
+     */
+    public function markAsRead(EmailMessage $email): JsonResponse
+    {
+        // Ensure user can access this email (same company)
+        if ($email->emailAccount->company_id !== auth()->user()->company_id) {
+            abort(403);
+        }
+
+        $email->update(['is_read' => true]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Email marked as read',
+            'email_id' => $email->id,
+        ]);
+    }
+    
+    /**
+     * Mark an email as unread
+     */
+    public function markAsUnread(EmailMessage $email): JsonResponse
+    {
+        // Ensure user can access this email (same company)
+        if ($email->emailAccount->company_id !== auth()->user()->company_id) {
+            abort(403);
+        }
+
+        $email->update(['is_read' => false]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Email marked as unread',
+            'email_id' => $email->id,
+        ]);
     }
 
     /**

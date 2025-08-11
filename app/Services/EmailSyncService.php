@@ -9,7 +9,6 @@ use App\Models\Customer;
 use App\Models\EmailAccount;
 use App\Models\EmailAttachment;
 use App\Models\EmailMessage;
-use App\Services\AttachmentStorageService;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +16,7 @@ use Illuminate\Support\Facades\Log;
 class EmailSyncService extends BaseService
 {
     private EmailProviderFactory $providerFactory;
+
     private AttachmentStorageService $attachmentStorage;
 
     public function __construct(EmailProviderFactory $providerFactory, AttachmentStorageService $attachmentStorage)
@@ -154,16 +154,7 @@ class EmailSyncService extends BaseService
     private function processEmail(EmailAccount $emailAccount, array $emailData): array
     {
         $messageId = $emailData['message_id'];
-        
-        // Circuit breaker for infinite loop prevention
-        if ($messageId === '1985b8d55892dd7f') {
-            Log::warning('EmailSync: Skipping problematic message to prevent infinite loop', [
-                'message_id' => $messageId,
-                'email_account_id' => $emailAccount->id
-            ]);
-            return ['status' => 'skipped', 'reason' => 'circuit_breaker'];
-        }
-        
+
         // Check if email already exists
         $existingEmail = EmailMessage::where('message_id', $messageId)
             ->where('email_account_id', $emailAccount->id)
@@ -185,8 +176,6 @@ class EmailSyncService extends BaseService
         $bodyHtml = $emailData['body_html'] ?? null;
         $snippet = substr(strip_tags($bodyContent), 0, 150);
 
-        // Processing email (verbose logging removed)
-
         $emailMessage = EmailMessage::create([
             'email_account_id' => $emailAccount->id,
             'customer_id' => $customer->id,
@@ -205,12 +194,12 @@ class EmailSyncService extends BaseService
             'status' => 'pending',
             'processing_status' => 'pending',
             'labels' => $emailData['provider_data']['labels'] ?? [],
+            'is_read' => $emailData['is_read'] ?? false,
+            'is_important' => $emailData['is_important'] ?? false,
         ]);
 
-        // Email saved to database (verbose logging removed)
-
         // Process attachments if any
-        if (!empty($emailData['attachments'])) {
+        if (! empty($emailData['attachments'])) {
             $this->processAttachments($emailMessage, $emailData['attachments'], $emailAccount);
         }
 
@@ -221,14 +210,14 @@ class EmailSyncService extends BaseService
 
         // Broadcast new email event for real-time updates
         try {
-            \Log::info('Broadcasting NewEmailReceived event', ['email_id' => $emailMessage->id]);
+            Log::info('Broadcasting NewEmailReceived event', ['email_id' => $emailMessage->id]);
             broadcast(new \App\Events\NewEmailReceived($emailMessage));
-            \Log::info('Successfully broadcasted NewEmailReceived event', ['email_id' => $emailMessage->id]);
+            Log::info('Successfully broadcasted NewEmailReceived event', ['email_id' => $emailMessage->id]);
         } catch (\Exception $e) {
-            \Log::error('Failed to broadcast new email event', [
+            Log::error('Failed to broadcast new email event', [
                 'email_id' => $emailMessage->id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
         }
 
@@ -303,6 +292,8 @@ class EmailSyncService extends BaseService
         $limit = $options['limit'] ?? 25;
         $pageToken = $options['page_token'] ?? null;
         $fetchAll = $options['fetch_all'] ?? false;
+        $maxTotal = $options['max_total'] ?? null; // Total limit for initial sync
+        $alreadyProcessed = $options['already_processed'] ?? 0; // How many we've already processed
 
         try {
             $provider = $this->providerFactory->createProvider($emailAccount);
@@ -313,6 +304,32 @@ class EmailSyncService extends BaseService
 
             // For Gmail, use the optimized batch ID fetching
             if ($provider instanceof GmailService && method_exists($provider, 'fetchEmailIds')) {
+                // Ensure we don't fetch more than needed for the total limit
+                if ($maxTotal !== null) {
+                    $remainingToProcess = $maxTotal - $alreadyProcessed;
+                    if ($remainingToProcess <= 0) {
+                        Log::info('Max total limit reached, stopping sync', [
+                            'max_total' => $maxTotal,
+                            'already_processed' => $alreadyProcessed,
+                        ]);
+                        return [
+                            'success' => true,
+                            'processed' => 0,
+                            'skipped' => 0,
+                            'next_page_token' => null,
+                            'has_more' => false,
+                        ];
+                    }
+                    // Adjust limit to not exceed max total
+                    $limit = min($limit, $remainingToProcess);
+                }
+
+                Log::debug('Fetching email IDs batch', [
+                    'limit' => $limit,
+                    'page_token' => $pageToken,
+                    'fetch_all' => $fetchAll,
+                ]);
+
                 $result = $provider->fetchEmailIds($limit, $pageToken, $fetchAll);
 
                 if (! $result['success']) {
@@ -331,13 +348,27 @@ class EmailSyncService extends BaseService
                 // Filter out existing emails
                 $newMessageIds = array_diff($messageIds, $existingMessageIds);
 
+                // If we have a max total limit (for initial sync), enforce it strictly
+                if ($maxTotal !== null) {
+                    $remainingToProcess = $maxTotal - $alreadyProcessed;
+                    $newMessageIds = array_slice($newMessageIds, 0, $remainingToProcess);
+                    
+                    // Check if we'll reach the limit after processing this batch
+                    $willReachLimit = ($alreadyProcessed + count($newMessageIds)) >= $maxTotal;
+                    if ($willReachLimit) {
+                        $nextPageToken = null; // Force stop after this batch
+                        Log::info('Will reach max total limit after this batch', [
+                            'max_total' => $maxTotal,
+                            'after_batch' => $alreadyProcessed + count($newMessageIds),
+                        ]);
+                    }
+                }
+
                 // Dispatch individual jobs for new emails
                 foreach ($newMessageIds as $messageId) {
                     ProcessSingleEmailJob::dispatch($emailAccount, $messageId)
                         ->onQueue('emails');
                 }
-
-                // Email processing jobs dispatched (verbose logging removed)
 
                 // Update last sync timestamp
                 $emailAccount->update(['last_sync_at' => now()]);
@@ -374,22 +405,20 @@ class EmailSyncService extends BaseService
      */
     private function processAttachments(EmailMessage $emailMessage, array $attachments, EmailAccount $emailAccount): void
     {
-        // Processing attachments (verbose logging removed)
-
         foreach ($attachments as $attachmentData) {
             try {
                 // Check if this is an embedded inline image or needs to be downloaded
                 $content = null;
-                
+
                 if (isset($attachmentData['embedded_data'])) {
                     // Inline image with embedded data - decode it
                     $content = base64_decode(str_replace(['-', '_'], ['+', '/'], $attachmentData['embedded_data']));
                 } else {
                     // Regular attachment - download it
                     $content = $this->downloadGmailAttachment($emailAccount, $attachmentData);
-                    
+
                 }
-                
+
                 if ($content) {
                     // Store the attachment file
                     $storedPath = $this->attachmentStorage->storeAttachmentContent(
@@ -408,8 +437,6 @@ class EmailSyncService extends BaseService
                         'content_disposition' => $attachmentData['content_disposition'] ?? null,
                         'storage_path' => $storedPath,
                     ]);
-
-                    // Attachment processed successfully (verbose logging removed)
                 }
             } catch (Exception $e) {
                 Log::error('Failed to process attachment', [
@@ -427,21 +454,21 @@ class EmailSyncService extends BaseService
     {
         try {
             $provider = $this->providerFactory->createProvider($emailAccount);
-            
+
             if (method_exists($provider, 'downloadAttachment')) {
                 return $provider->downloadAttachment(
                     $attachmentData['message_id'],
                     $attachmentData['attachment_id']
                 );
             }
-            
+
             return null;
         } catch (Exception $e) {
             Log::error('Failed to download Gmail attachment', [
                 'attachment_id' => $attachmentData['attachment_id'],
                 'error' => $e->getMessage(),
             ]);
-            
+
             return null;
         }
     }

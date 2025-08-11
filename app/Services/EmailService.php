@@ -357,7 +357,11 @@ class EmailService
                     ->first();
 
                 if ($account) {
-                    SyncEmailAccountJob::dispatch($account);
+                    SyncEmailAccountJob::dispatch($account, [
+                        'manual_sync' => true,
+                        'limit' => 25,
+                        'fetch_all' => false, // Only fetch new/unread emails for manual sync
+                    ]);
 
                     return [
                         'success' => true,
@@ -383,7 +387,11 @@ class EmailService
             }
 
             foreach ($accounts as $account) {
-                SyncEmailAccountJob::dispatch($account);
+                SyncEmailAccountJob::dispatch($account, [
+                    'manual_sync' => true,
+                    'limit' => 25,
+                    'fetch_all' => false, // Only fetch new/unread emails for manual sync
+                ]);
             }
 
             return [

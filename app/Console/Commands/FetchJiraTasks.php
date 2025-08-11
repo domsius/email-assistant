@@ -102,53 +102,80 @@ class FetchJiraTasks extends Command
     }
     
     /**
-     * Fetch tasks from JIRA API
+     * Fetch tasks from JIRA API with pagination support
      */
     private function fetchJiraTasks(string $domain, string $email, string $token, string $jql, int $maxResults): array
     {
         $url = "https://{$domain}/rest/api/3/search";
+        $allIssues = [];
+        $startAt = 0;
+        $pageSize = min(100, $maxResults); // Jira API max is 100 per page
         
-        $ch = curl_init();
+        $this->info('Fetching tasks with pagination...');
         
-        $queryParams = http_build_query([
-            'jql' => $jql,
-            'maxResults' => $maxResults,
-            'fields' => 'summary,status,assignee,reporter,priority,created,updated,description,issuetype,project,components,labels,fixVersions,customfield_10016,timetracking,comment'
-        ]);
-        
-        curl_setopt_array($ch, [
-            CURLOPT_URL => "{$url}?{$queryParams}",
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                'Accept: application/json',
-                'Content-Type: application/json'
-            ],
-            CURLOPT_USERPWD => "{$email}:{$token}",
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_TIMEOUT => 30
-        ]);
-        
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
-        if (curl_errno($ch)) {
-            throw new \Exception('CURL Error: ' . curl_error($ch));
+        while (count($allIssues) < $maxResults) {
+            $currentPageSize = min($pageSize, $maxResults - count($allIssues));
+            
+            $ch = curl_init();
+            
+            $queryParams = http_build_query([
+                'jql' => $jql,
+                'startAt' => $startAt,
+                'maxResults' => $currentPageSize,
+                'fields' => 'summary,status,assignee,reporter,priority,created,updated,description,issuetype,project,components,labels,fixVersions,customfield_10016,timetracking,comment'
+            ]);
+            
+            curl_setopt_array($ch, [
+                CURLOPT_URL => "{$url}?{$queryParams}",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                    'Content-Type: application/json'
+                ],
+                CURLOPT_USERPWD => "{$email}:{$token}",
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_TIMEOUT => 30
+            ]);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            if (curl_errno($ch)) {
+                throw new \Exception('CURL Error: ' . curl_error($ch));
+            }
+            
+            curl_close($ch);
+            
+            if ($httpCode !== 200) {
+                $errorMsg = json_decode($response, true);
+                throw new \Exception("JIRA API Error (HTTP {$httpCode}): " . ($errorMsg['errorMessages'][0] ?? 'Unknown error'));
+            }
+            
+            $data = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new \Exception('Failed to parse JIRA response: ' . json_last_error_msg());
+            }
+            
+            $issues = $data['issues'] ?? [];
+            $total = $data['total'] ?? 0;
+            
+            if (empty($issues)) {
+                break; // No more issues to fetch
+            }
+            
+            $allIssues = array_merge($allIssues, $issues);
+            $this->info(sprintf('Fetched %d/%d tasks (total available: %d)', count($allIssues), $maxResults, $total));
+            
+            // Check if we've fetched all available issues
+            if (count($allIssues) >= $total) {
+                break;
+            }
+            
+            $startAt += count($issues);
         }
         
-        curl_close($ch);
-        
-        if ($httpCode !== 200) {
-            $errorMsg = json_decode($response, true);
-            throw new \Exception("JIRA API Error (HTTP {$httpCode}): " . ($errorMsg['errorMessages'][0] ?? 'Unknown error'));
-        }
-        
-        $data = json_decode($response, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new \Exception('Failed to parse JIRA response: ' . json_last_error_msg());
-        }
-        
-        return $data['issues'] ?? [];
+        return $allIssues;
     }
     
     /**

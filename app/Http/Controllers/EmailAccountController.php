@@ -194,8 +194,12 @@ class EmailAccountController extends Controller
             abort(403);
         }
 
-        // Dispatch sync job
-        SyncEmailAccountJob::dispatch($emailAccount);
+        // Dispatch sync job with manual sync options
+        SyncEmailAccountJob::dispatch($emailAccount, [
+            'manual_sync' => true,
+            'limit' => 25,
+            'fetch_all' => false, // Only fetch new/unread emails for manual sync
+        ]);
 
         return back()->with('success', 'Email sync initiated for '.$emailAccount->email_address);
     }

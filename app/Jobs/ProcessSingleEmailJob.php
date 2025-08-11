@@ -48,19 +48,32 @@ class ProcessSingleEmailJob implements ShouldQueue
 
 
         try {
-            // Check if email already exists
-            $existingEmail = EmailMessage::where('message_id', $this->messageId)
-                ->where('email_account_id', $this->emailAccount->id)
-                ->first();
-
-            if ($existingEmail) {
-                Log::info('Email already exists, skipping', [
+            // Use a lock to prevent race conditions when multiple jobs process the same email
+            $lockKey = "email_process_{$this->emailAccount->id}_{$this->messageId}";
+            $lock = \Illuminate\Support\Facades\Cache::lock($lockKey, 30);
+            
+            if (!$lock->get()) {
+                Log::info('Email is being processed by another job, skipping', [
                     'account_id' => $this->emailAccount->id,
                     'message_id' => $this->messageId,
                 ]);
-
                 return;
             }
+            
+            try {
+                // Check if email already exists (inside the lock)
+                $existingEmail = EmailMessage::where('message_id', $this->messageId)
+                    ->where('email_account_id', $this->emailAccount->id)
+                    ->first();
+
+                if ($existingEmail) {
+                    Log::info('Email already exists, skipping', [
+                        'account_id' => $this->emailAccount->id,
+                        'message_id' => $this->messageId,
+                    ]);
+
+                    return;
+                }
 
             $provider = $providerFactory->createProvider($this->emailAccount);
 
@@ -70,6 +83,15 @@ class ProcessSingleEmailJob implements ShouldQueue
             if (! $emailData) {
                 throw new \Exception('Failed to fetch email data from provider');
             }
+
+            // Debug logging to check what we're getting from Gmail
+            Log::info('Email data from Gmail provider', [
+                'message_id' => $this->messageId,
+                'is_read' => $emailData['is_read'] ?? 'NOT SET',
+                'is_important' => $emailData['is_important'] ?? 'NOT SET',
+                'folder' => $emailData['folder'] ?? 'NOT SET',
+                'labels' => $emailData['provider_data']['labels'] ?? [],
+            ]);
 
             // Find or create customer
             $customer = Customer::firstOrCreate(
@@ -84,9 +106,11 @@ class ProcessSingleEmailJob implements ShouldQueue
                 ]
             );
 
-            // Parse received date
-            $receivedAt = isset($emailData['date'])
-                ? \Carbon\Carbon::parse($emailData['date'])
+            // Parse received date - use received_at from Gmail
+            $receivedAt = isset($emailData['received_at'])
+                ? (is_string($emailData['received_at']) 
+                    ? \Carbon\Carbon::parse($emailData['received_at']) 
+                    : $emailData['received_at'])
                 : now();
 
             // Create email message
@@ -94,35 +118,67 @@ class ProcessSingleEmailJob implements ShouldQueue
             $bodyHtml = $emailData['body_html'] ?? null;
             $snippet = substr(strip_tags($bodyContent), 0, 150);
 
-            $emailMessage = EmailMessage::create([
-                'email_account_id' => $this->emailAccount->id,
-                'customer_id' => $customer->id,
-                'message_id' => $this->messageId,
-                'thread_id' => $emailData['thread_id'] ?? null,
-                'folder' => 'INBOX',
-                'subject' => $emailData['subject'] ?? 'No Subject',
-                'body_content' => $bodyContent,
-                'body_plain' => strip_tags($bodyContent),
-                'body_html' => $bodyHtml,
-                'snippet' => $snippet,
-                'sender_email' => $emailData['sender_email'],
-                'from_email' => $emailData['sender_email'],
-                'sender_name' => $emailData['sender_name'] ?? '',
-                'received_at' => $receivedAt,
-                'status' => 'pending',
-                'processing_status' => 'pending',
-                'labels' => $emailData['labels'] ?? [],
-            ]);
+            try {
+                $emailMessage = EmailMessage::create([
+                    'email_account_id' => $this->emailAccount->id,
+                    'customer_id' => $customer->id,
+                    'message_id' => $this->messageId,
+                    'thread_id' => $emailData['thread_id'] ?? null,
+                    'folder' => $emailData['folder'] ?? 'INBOX',
+                    'subject' => $emailData['subject'] ?? 'No Subject',
+                    'body_content' => $bodyContent,
+                    'body_plain' => strip_tags($bodyContent),
+                    'body_html' => $bodyHtml,
+                    'snippet' => $snippet,
+                    'sender_email' => $emailData['sender_email'],
+                    'from_email' => $emailData['sender_email'],
+                    'sender_name' => $emailData['sender_name'] ?? '',
+                    'received_at' => $receivedAt,
+                    'status' => 'pending',
+                    'processing_status' => 'pending',
+                    'labels' => $emailData['provider_data']['labels'] ?? [],
+                    'is_read' => $emailData['is_read'] ?? false,
+                    'is_important' => $emailData['is_important'] ?? false,
+                ]);
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Check if it's a unique constraint violation
+                if ($e->getCode() == 23000 || str_contains($e->getMessage(), 'Duplicate entry')) {
+                    Log::info('Email already exists (caught by unique constraint), skipping', [
+                        'account_id' => $this->emailAccount->id,
+                        'message_id' => $this->messageId,
+                    ]);
+                    return;
+                }
+                throw $e; // Re-throw if it's a different database error
+            }
 
             Log::info('Successfully processed and saved email', [
                 'account_id' => $this->emailAccount->id,
                 'message_id' => $this->messageId,
                 'email_id' => $emailMessage->id,
+                'is_read_saved' => $emailMessage->is_read,
+                'folder_saved' => $emailMessage->folder,
             ]);
+
+            // Broadcast new email event for real-time updates
+            try {
+                Log::info('Broadcasting NewEmailReceived event', ['email_id' => $emailMessage->id]);
+                broadcast(new \App\Events\NewEmailReceived($emailMessage));
+                Log::info('Successfully broadcasted NewEmailReceived event', ['email_id' => $emailMessage->id]);
+            } catch (\Exception $e) {
+                Log::error('Failed to broadcast new email event', [
+                    'email_id' => $emailMessage->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
 
             // Dispatch AI processing job if enabled
             if (config('email-processing.auto_process_incoming', false)) {
                 ProcessIncomingEmail::dispatch($emailMessage);
+            }
+            } finally {
+                // Always release the lock
+                $lock->release();
             }
         } catch (\Exception $e) {
             Log::error('Error processing single email', [

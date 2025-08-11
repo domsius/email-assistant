@@ -92,8 +92,11 @@ class GmailWebhookController extends Controller
                     }
                 }
                 
-                // Dispatch sync job with high priority
-                SyncEmailAccountJob::dispatch($emailAccount)
+                // Dispatch sync job with high priority and webhook flag
+                SyncEmailAccountJob::dispatch($emailAccount, [
+                    'webhook_sync' => true,
+                    'limit' => 10, // Only fetch recent emails
+                ])
                     ->onQueue('high-priority');
                     
                 break;

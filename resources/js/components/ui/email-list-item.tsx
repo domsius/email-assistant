@@ -9,6 +9,7 @@ import {
   Languages,
   Star,
   FileText,
+  AlertOctagon,
 } from "lucide-react";
 
 interface EmailMessage {
@@ -22,6 +23,7 @@ interface EmailMessage {
   status: "pending" | "processing" | "processed";
   isRead: boolean;
   isStarred: boolean;
+  isImportant?: boolean;
   isSelected: boolean;
   language?: string;
   topic?: string;
@@ -151,6 +153,9 @@ export function EmailListItem({
                     )}
                   />
                 </button>
+              )}
+              {email.isImportant && (
+                <AlertOctagon className="h-3 w-3 text-yellow-500 ml-1" title="Important" />
               )}
             </div>
             <div className="ml-auto flex items-center gap-2">

@@ -52,64 +52,81 @@ class InitialEmailSyncJob implements ShouldQueue
         // Set max initial sync from config
         $this->maxInitialSync = config('mail-sync.sync_email_limit', 200);
 
+        Log::info('Starting initial email sync', [
+            'account_id' => $this->emailAccount->id,
+            'email' => $this->emailAccount->email_address,
+            'max_limit' => $this->maxInitialSync,
+        ]);
 
         try {
             // Mark sync as started
             $this->emailAccount->update([
                 'sync_status' => 'syncing',
                 'sync_progress' => 0,
-                'sync_total' => 0,
+                'sync_total' => $this->maxInitialSync, // Set to exactly 200
                 'sync_error' => null,
                 'sync_started_at' => now(),
                 'sync_completed_at' => null,
             ]);
 
-            // First, get total email count from provider
-            $provider = $providerFactory->createProvider($this->emailAccount);
-            $accountInfo = $provider->getAccountInfo();
-            $totalMessages = $accountInfo['messages_total'] ?? 0;
-
-            // Limit initial sync to reasonable amount
-            $messagesToSync = min($totalMessages, $this->maxInitialSync);
-
-            // Update total count
-            $this->emailAccount->update([
-                'sync_total' => $messagesToSync,
-            ]);
-
-
-
             // Sync emails in batches with progress updates
             $processedTotal = 0;
+            $skippedTotal = 0;
             $batchSize = 50;
             $pageToken = null;
-            $hasMore = true;
+            $iterations = 0;
 
-            while ($hasMore && $processedTotal < $messagesToSync) {
-                $result = $syncService->syncEmails($this->emailAccount, [
-                    'limit' => $batchSize,
-                    'batch_size' => 10,
+            // Continue until we've processed 200 emails or run out of emails
+            while ($processedTotal < $this->maxInitialSync) {
+                $iterations++;
+                
+                // Calculate how many emails we can still process
+                $remainingToSync = $this->maxInitialSync - $processedTotal;
+                $currentBatchLimit = min($batchSize, $remainingToSync);
+                
+                Log::info('Fetching email batch', [
+                    'iteration' => $iterations,
+                    'batch_size' => $currentBatchLimit,
+                    'processed_so_far' => $processedTotal,
+                    'remaining' => $remainingToSync,
+                ]);
+                
+                $result = $syncService->syncEmailsOptimized($this->emailAccount, [
+                    'limit' => $currentBatchLimit,
                     'page_token' => $pageToken,
-                    'fetch_all' => true, // Fetch all emails, not just unread
+                    'fetch_all' => true, // Include both read and unread emails
+                    'max_total' => $this->maxInitialSync,
+                    'already_processed' => $processedTotal,
+                    'initial_sync' => true, // Mark this as initial sync for proper pagination
                 ]);
 
                 if ($result['success']) {
                     $processedTotal += $result['processed'];
+                    $skippedTotal += $result['skipped'] ?? 0;
 
                     // Update progress
                     $this->emailAccount->update([
                         'sync_progress' => $processedTotal,
                     ]);
 
+                    Log::info('Batch processed', [
+                        'iteration' => $iterations,
+                        'batch_processed' => $result['processed'],
+                        'batch_skipped' => $result['skipped'] ?? 0,
+                        'total_processed' => $processedTotal,
+                        'total_skipped' => $skippedTotal,
+                    ]);
 
-
-                    $hasMore = $result['has_more'] ?? false;
+                    // Check if we have more emails to fetch
                     $pageToken = $result['next_page_token'] ?? null;
+                    
+                    // Stop if no more emails available or we've reached our limit
+                    if (!$pageToken || $processedTotal >= $this->maxInitialSync) {
+                        break;
+                    }
 
                     // Small delay to avoid rate limits
-                    if ($hasMore) {
-                        sleep(1);
-                    }
+                    sleep(1);
                 } else {
                     throw new \Exception($result['error'] ?? 'Unknown sync error');
                 }
@@ -122,6 +139,31 @@ class InitialEmailSyncJob implements ShouldQueue
                 'sync_completed_at' => now(),
                 'last_sync_at' => now(),
             ]);
+
+            Log::info('Initial email sync completed', [
+                'account_id' => $this->emailAccount->id,
+                'total_processed' => $processedTotal,
+                'total_skipped' => $skippedTotal,
+                'iterations' => $iterations,
+            ]);
+
+            // Set up Gmail watch for real-time updates after initial sync
+            if ($this->emailAccount->provider === 'gmail') {
+                try {
+                    $provider = $providerFactory->createProvider($this->emailAccount);
+                    if (method_exists($provider, 'setupWatch')) {
+                        $watchSuccess = $provider->setupWatch();
+                        Log::info('Gmail watch setup ' . ($watchSuccess ? 'successful' : 'failed'), [
+                            'account_id' => $this->emailAccount->id,
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Failed to set up Gmail watch after initial sync', [
+                        'account_id' => $this->emailAccount->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
 
 
 

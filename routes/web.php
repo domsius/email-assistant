@@ -149,7 +149,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/emails/{emailId}/toggle-star', [\App\Http\Controllers\EmailOperationsController::class, 'toggleStar'])->name('emails.toggle-star');
 
-    Route::get('/emails/{emailId}', [\App\Http\Controllers\EmailOperationsController::class, 'show'])->name('emails.show');
+    Route::get('/emails/{emailId}', [\App\Http\Controllers\EmailOperationsController::class, 'show'])->name('emails.detail');
     
     // Inline image route (for authenticated session access)
     Route::get('/emails/{email}/inline/{contentId}', [\App\Http\Controllers\Api\EmailController::class, 'getInlineImage'])->name('emails.inline-image');

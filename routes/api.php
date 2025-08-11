@@ -29,6 +29,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('ai/generate-text', [EmailController::class, 'generateText']);
     Route::post('emails/{email}/analyze', [EmailController::class, 'analyze']);
     
+    // Email read status routes
+    Route::post('emails/{email}/mark-read', [EmailController::class, 'markAsRead']);
+    Route::post('emails/{email}/mark-unread', [EmailController::class, 'markAsUnread']);
+    
     // Attachment routes
     Route::get('emails/{email}/attachments/{attachment}', [EmailController::class, 'downloadAttachment']);
     Route::get('emails/{email}/inline/{contentId}', [EmailController::class, 'getInlineImage']);
@@ -47,16 +51,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
 Route::get('/email-accounts/oauth/callback/{provider}', [App\Http\Controllers\Api\EmailAccountController::class, 'handleOAuthCallback']);
 
 // Gmail Push Notification via Pub/Sub (public - Google Pub/Sub will call this)
-Route::post('/webhooks/gmail/pubsub', [App\Http\Controllers\Webhooks\GmailPubSubController::class, 'handlePushNotification'])
-    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
-Route::get('/webhooks/gmail/health', [App\Http\Controllers\Webhooks\GmailPubSubController::class, 'health'])
-    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+Route::post('/webhooks/gmail/pubsub', [App\Http\Controllers\Webhooks\GmailPubSubController::class, 'handlePushNotification']);
+Route::get('/webhooks/gmail/health', [App\Http\Controllers\Webhooks\GmailPubSubController::class, 'health']);
 
 // Legacy direct webhook (kept for compatibility)
-Route::post('/webhooks/gmail', [App\Http\Controllers\Webhooks\GmailWebhookController::class, 'handleNotification'])
-    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
-Route::get('/webhooks/gmail/verify', [App\Http\Controllers\Webhooks\GmailWebhookController::class, 'verify'])
-    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+Route::post('/webhooks/gmail', [App\Http\Controllers\Webhooks\GmailWebhookController::class, 'handleNotification']);
+Route::get('/webhooks/gmail/verify', [App\Http\Controllers\Webhooks\GmailWebhookController::class, 'verify']);
 
 // Email sync routes (for inbox operations)
 Route::middleware('auth:sanctum')->group(function () {
@@ -70,7 +70,11 @@ Route::middleware('auth:sanctum')->group(function () {
                 ->first();
 
             if ($account) {
-                \App\Jobs\SyncEmailAccountJob::dispatch($account);
+                \App\Jobs\SyncEmailAccountJob::dispatch($account, [
+                    'manual_sync' => true,
+                    'limit' => 25,
+                    'fetch_all' => false, // Only fetch new/unread emails for manual sync
+                ]);
 
                 return response()->json(['message' => 'Sync initiated for '.$account->email_address]);
             }
@@ -81,7 +85,11 @@ Route::middleware('auth:sanctum')->group(function () {
                 ->get();
 
             foreach ($accounts as $account) {
-                \App\Jobs\SyncEmailAccountJob::dispatch($account);
+                \App\Jobs\SyncEmailAccountJob::dispatch($account, [
+                    'manual_sync' => true,
+                    'limit' => 25,
+                    'fetch_all' => false, // Only fetch new/unread emails for manual sync
+                ]);
             }
 
             return response()->json(['message' => 'Sync initiated for all accounts']);

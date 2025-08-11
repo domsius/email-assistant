@@ -60,7 +60,9 @@ class SyncEmails extends Command
                     continue;
                 }
 
-                $emails = $provider->fetchEmails(1000); // Fetch up to 1000 emails
+                // Use configured limit instead of hardcoded 1000
+                $limit = config('mail-sync.sync_email_limit', 200);
+                $emails = $provider->fetchEmails($limit);
                 $processedCount = 0;
 
                 $this->withProgressBar($emails, function ($emailData) use ($account, $languageService, &$processedCount) {

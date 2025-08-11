@@ -8,7 +8,6 @@ use Google\Client as GoogleClient;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
 use Illuminate\Support\Facades\Log;
-use App\Models\EmailAccountAlias;
 
 class GmailService implements EmailProviderInterface
 {
@@ -121,7 +120,7 @@ class GmailService implements EmailProviderInterface
         }
     }
 
-    public function fetchEmails(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
+    public function fetchEmails(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false, ?string $folder = null): array
     {
         try {
             if (! $this->isAuthenticated()) {
@@ -143,16 +142,8 @@ class GmailService implements EmailProviderInterface
                     'maxResults' => $requestLimit,
                 ];
 
-                // Build base query
-                $query = 'in:inbox';
-
-                // Limit is now handled by maxResults parameter
-                // No date filter - fetching most recent emails up to the limit
-
-                // Add unread filter if not fetching all
-                if (! $fetchAll) {
-                    $query .= ' is:unread';
-                }
+                // Build base query based on folder
+                $query = $this->buildGmailQuery($folder);
 
                 $params['q'] = $query;
 
@@ -169,6 +160,11 @@ class GmailService implements EmailProviderInterface
                 }
 
                 foreach ($messages as $message) {
+                    // Check if we've reached the limit
+                    if ($totalFetched >= $limit) {
+                        break 2; // Break out of both foreach and while loops
+                    }
+
                     $email = $this->processGmailMessage($message);
                     if ($email) {
                         $emails[] = $email;
@@ -185,6 +181,14 @@ class GmailService implements EmailProviderInterface
 
             }
 
+            // Log summary of fetch operation
+            Log::info('Gmail fetch completed', [
+                'account_id' => $this->emailAccount->id,
+                'requested_limit' => $limit,
+                'total_fetched' => count($emails),
+                'has_more_pages' => !empty($this->nextPageToken),
+                'next_page_token' => $this->nextPageToken,
+            ]);
 
             return $emails;
         } catch (Exception $e) {
@@ -198,15 +202,7 @@ class GmailService implements EmailProviderInterface
     {
         try {
             $messageId = $message->getId();
-            
-            // Circuit breaker for problematic message
-            if ($messageId === '1985b8d55892dd7f') {
-                Log::warning('GmailService: Skipping problematic message in processGmailMessage', [
-                    'message_id' => $messageId
-                ]);
-                return null;
-            }
-            
+
             $fullMessage = $this->gmail->users_messages->get('me', $messageId);
             $headers = $fullMessage->getPayload()->getHeaders();
 
@@ -222,8 +218,9 @@ class GmailService implements EmailProviderInterface
             if (! $senderEmail) {
                 Log::warning('GmailService: Skipping message without valid sender', [
                     'message_id' => $messageId,
-                    'from' => $from
+                    'from' => $from,
                 ]);
+
                 return null; // Skip emails without valid sender
             }
 
@@ -232,6 +229,24 @@ class GmailService implements EmailProviderInterface
 
             // Extract attachments
             $attachments = $this->extractAttachments($fullMessage);
+
+            // Check if email is read (Gmail uses UNREAD label)
+            $labels = $fullMessage->getLabelIds() ?? [];
+            $isRead = !in_array('UNREAD', $labels);
+            $isImportant = in_array('IMPORTANT', $labels);
+            
+            // Log the label analysis for debugging
+            Log::info('Gmail labels analysis', [
+                'message_id' => $messageId,
+                'labels' => $labels,
+                'has_UNREAD' => in_array('UNREAD', $labels),
+                'has_IMPORTANT' => $isImportant,
+                'is_read' => $isRead,
+                'subject' => substr($subject, 0, 50),
+            ]);
+
+            // Determine the folder based on labels
+            $folder = $this->determineFolderFromLabels($labels);
 
             return [
                 'message_id' => $fullMessage->getId(),
@@ -242,6 +257,9 @@ class GmailService implements EmailProviderInterface
                 'body_content' => $bodyData['plain'],
                 'body_html' => $bodyData['html'],
                 'received_at' => $date ? \Carbon\Carbon::parse($date) : now(),
+                'is_read' => $isRead,
+                'is_important' => $isImportant,
+                'folder' => $folder,
                 'provider_data' => [
                     'gmail_id' => $fullMessage->getId(),
                     'labels' => $fullMessage->getLabelIds(),
@@ -270,45 +288,32 @@ class GmailService implements EmailProviderInterface
     {
         $attachments = [];
         $messageId = $message->getId();
-        
-        // Circuit breaker for problematic message - stop infinite loop
-        if ($messageId === '1985b8d55892dd7f') {
-            Log::warning('Gmail: Circuit breaker activated in extractAttachments', [
-                'message_id' => $messageId
-            ]);
-            return []; // Return empty attachments array
-        }
-        
+
         try {
             $this->extractAttachmentsFromPart($message->getPayload(), $attachments, $messageId);
         } catch (Exception $e) {
-            Log::error('Error extracting attachments: ' . $e->getMessage(), [
+            Log::error('Error extracting attachments: '.$e->getMessage(), [
                 'message_id' => $messageId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
-        
+
         return $attachments;
     }
-    
+
     private function extractAttachmentsFromPart($part, &$attachments, $messageId)
     {
-        // Circuit breaker for problematic message - stop recursion
-        if ($messageId === '1985b8d55892dd7f') {
-            return; // Exit immediately without processing
-        }
-        
         $filename = $part->getFilename();
         $mimeType = $part->getMimeType();
         $body = $part->getBody();
         $attachmentId = $body->getAttachmentId();
         $headers = $part->getHeaders();
-        
+
         // Check if this is an attachment (either with filename or inline image)
         $isAttachment = false;
         $contentId = null;
         $contentDisposition = null;
-        
+
         // Check headers for inline images and content disposition
         foreach ($headers as $header) {
             if ($header->getName() === 'Content-ID') {
@@ -317,23 +322,23 @@ class GmailService implements EmailProviderInterface
             }
             if ($header->getName() === 'Content-Disposition') {
                 $contentDisposition = $header->getValue();
-                if (str_contains(strtolower($contentDisposition), 'attachment') || 
+                if (str_contains(strtolower($contentDisposition), 'attachment') ||
                     str_contains(strtolower($contentDisposition), 'inline')) {
                     $isAttachment = true;
                 }
             }
         }
-        
+
         // Also consider parts with filenames or attachment IDs as attachments
         if ($filename || $attachmentId) {
             $isAttachment = true;
         }
-        
+
         // For inline images without filenames, check if it's an image type
-        if (!$filename && $contentId && str_starts_with($mimeType, 'image/')) {
+        if (! $filename && $contentId && str_starts_with($mimeType, 'image/')) {
             $isAttachment = true;
             // Generate a filename for inline images
-            $extension = match($mimeType) {
+            $extension = match ($mimeType) {
                 'image/jpeg' => 'jpg',
                 'image/png' => 'png',
                 'image/gif' => 'gif',
@@ -342,14 +347,14 @@ class GmailService implements EmailProviderInterface
             };
             $filename = "inline_image_{$contentId}.{$extension}";
         }
-        
+
         // Check if we should include this part as an attachment
         if ($isAttachment) {
             // For inline images without attachment ID, we need to extract the data directly
-            if (!$attachmentId && $contentId && $body->getData()) {
+            if (! $attachmentId && $contentId && $body->getData()) {
                 // This is an inline image embedded in the email body
                 $attachment = [
-                    'filename' => $filename ?: 'attachment_' . $contentId,
+                    'filename' => $filename ?: 'attachment_'.$contentId,
                     'content_type' => $mimeType,
                     'size' => $body->getSize() ?? 0,
                     'attachment_id' => null,
@@ -358,12 +363,12 @@ class GmailService implements EmailProviderInterface
                     'content_disposition' => $contentDisposition ?: 'inline',
                     'embedded_data' => $body->getData(), // Base64 encoded data
                 ];
-                
+
                 $attachments[] = $attachment;
             } elseif ($attachmentId) {
                 // Regular attachment with attachment ID
                 $attachment = [
-                    'filename' => $filename ?: 'attachment_' . $attachmentId,
+                    'filename' => $filename ?: 'attachment_'.$attachmentId,
                     'content_type' => $mimeType,
                     'size' => $body->getSize() ?? 0,
                     'attachment_id' => $attachmentId,
@@ -371,18 +376,18 @@ class GmailService implements EmailProviderInterface
                     'content_id' => $contentId,
                     'content_disposition' => $contentDisposition ?: ($contentId ? 'inline' : 'attachment'),
                 ];
-                
+
                 $attachments[] = $attachment;
             } else {
                 Log::warning('Gmail: Skipping attachment without attachment ID or embedded data', [
                     'message_id' => $messageId,
                     'mime_type' => $mimeType,
                     'content_id' => $contentId,
-                    'filename' => $filename
+                    'filename' => $filename,
                 ]);
             }
         }
-        
+
         // Recursively check parts
         $parts = $part->getParts();
         if ($parts) {
@@ -397,15 +402,14 @@ class GmailService implements EmailProviderInterface
         $plainBody = '';
         $htmlBody = '';
 
-
         if ($payload->getParts()) {
             foreach ($payload->getParts() as $part) {
                 if ($part->getMimeType() === 'text/plain') {
                     $data = $part->getBody()->getData();
-                    $plainBody = base64url_decode($data);
+                    $plainBody = $this->base64url_decode($data);
                 } elseif ($part->getMimeType() === 'text/html') {
                     $data = $part->getBody()->getData();
-                    $htmlBody = base64url_decode($data);
+                    $htmlBody = $this->base64url_decode($data);
                 }
 
                 // Handle multipart/alternative or multipart/related
@@ -423,7 +427,7 @@ class GmailService implements EmailProviderInterface
             // Single part message
             $data = $payload->getBody()->getData();
             if ($data) {
-                $decodedData = base64url_decode($data);
+                $decodedData = $this->base64url_decode($data);
                 if ($payload->getMimeType() === 'text/html') {
                     $htmlBody = $decodedData;
                     $plainBody = strip_tags($decodedData);
@@ -438,11 +442,71 @@ class GmailService implements EmailProviderInterface
             $plainBody = strip_tags($htmlBody);
         }
 
-
         return [
             'plain' => $plainBody ?: 'No content',
             'html' => $htmlBody,
         ];
+    }
+
+    /**
+     * Build Gmail query based on folder
+     */
+    private function buildGmailQuery(?string $folder = null): string
+    {
+        // Map frontend folders to Gmail queries
+        switch ($folder) {
+            case 'inbox':
+            case null:
+                return 'in:inbox';
+            case 'sent':
+                return 'in:sent';
+            case 'drafts':
+                return 'in:drafts';
+            case 'spam':
+            case 'junk':
+                return 'in:spam';
+            case 'trash':
+                return 'in:trash';
+            case 'starred':
+                return 'is:starred';
+            case 'important':
+                return 'is:important';
+            case 'unread':
+                return 'is:unread';
+            case 'all':
+            case 'everything':
+                // Fetch from anywhere except spam/trash unless explicitly requested
+                return '-in:spam -in:trash';
+            default:
+                // If it's a custom label, search for it
+                return 'label:'.$folder;
+        }
+    }
+
+    /**
+     * Determine folder from Gmail labels
+     */
+    private function determineFolderFromLabels(array $labels): string
+    {
+        // Priority order for folder determination
+        if (in_array('DRAFT', $labels)) {
+            return 'drafts';
+        }
+        if (in_array('SENT', $labels)) {
+            return 'sent';
+        }
+        if (in_array('TRASH', $labels)) {
+            return 'trash';
+        }
+        if (in_array('SPAM', $labels)) {
+            return 'spam';
+        }
+        if (in_array('INBOX', $labels)) {
+            return 'inbox';
+        }
+
+        // Default to inbox if no standard folder label found
+        return 'inbox';
     }
 
     /**
@@ -462,6 +526,14 @@ class GmailService implements EmailProviderInterface
         return base64_decode($data);
     }
 
+    /**
+     * Encode string to base64url format (Gmail API uses base64url encoding)
+     */
+    private function base64url_encode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
     public function sendEmail(array $emailData): bool
     {
         try {
@@ -470,34 +542,34 @@ class GmailService implements EmailProviderInterface
             }
 
             // For custom domain aliases, verify they are properly configured
-            if (!empty($emailData['fromAlias']) && !str_ends_with($emailData['fromAlias'], '@gmail.com')) {
+            if (! empty($emailData['fromAlias']) && ! str_ends_with($emailData['fromAlias'], '@gmail.com')) {
                 try {
                     // Verify the send-as address exists and is verified
                     $sendAsAddresses = $this->gmail->users_settings_sendAs->listUsersSettingsSendAs('me');
                     $aliasFound = false;
                     $aliasVerified = false;
-                    
+
                     foreach ($sendAsAddresses->getSendAs() as $sendAs) {
                         if ($sendAs->getSendAsEmail() === $emailData['fromAlias']) {
                             $aliasFound = true;
                             $aliasVerified = ($sendAs->getVerificationStatus() === 'accepted');
-                            
+
                             // Log the alias configuration for debugging
                             break;
                         }
                     }
-                    
-                    if (!$aliasFound) {
+
+                    if (! $aliasFound) {
                         Log::warning("Send-as address not found in Gmail: {$emailData['fromAlias']}");
                         throw new Exception("The email address {$emailData['fromAlias']} is not configured in Gmail. Please add it in Gmail Settings > Accounts > Send mail as.");
                     }
-                    
-                    if (!$aliasVerified) {
+
+                    if (! $aliasVerified) {
                         Log::warning("Send-as address not verified in Gmail: {$emailData['fromAlias']}");
                         throw new Exception("The email address {$emailData['fromAlias']} is not verified in Gmail. Please verify it in Gmail Settings.");
                     }
                 } catch (\Google\Service\Exception $e) {
-                    Log::error("Failed to check send-as configuration: " . $e->getMessage());
+                    Log::error('Failed to check send-as configuration: '.$e->getMessage());
                 }
             }
 
@@ -506,10 +578,10 @@ class GmailService implements EmailProviderInterface
 
             // Build the email headers and body
             $emailContent = $this->buildEmailContent($emailData);
-            $message->setRaw(base64url_encode($emailContent));
+            $message->setRaw($this->base64url_encode($emailContent));
 
             // Send the email
-            $result = $this->gmail->users_messages->send('me', $message);
+            $this->gmail->users_messages->send('me', $message);
 
             return true;
         } catch (Exception $e) {
@@ -529,8 +601,9 @@ class GmailService implements EmailProviderInterface
     private function encodeHeader(string $value): string
     {
         if (preg_match('/[^\x20-\x7E]/', $value)) {
-            return '=?UTF-8?B?' . base64_encode($value) . '?=';
+            return '=?UTF-8?B?'.base64_encode($value).'?=';
         }
+
         return $value;
     }
 
@@ -539,14 +612,14 @@ class GmailService implements EmailProviderInterface
         $to = $emailData['to'];
         $subject = $emailData['subject'];
         $body = $emailData['body'];
-        
+
         // Use alias if provided, otherwise use the main account email
-        if (!empty($emailData['fromAlias'])) {
+        if (! empty($emailData['fromAlias'])) {
             // Look up the alias to get the display name
             $alias = $this->emailAccount->aliases()
                 ->where('email_address', $emailData['fromAlias'])
                 ->first();
-            
+
             if ($alias) {
                 $fromEmail = $alias->email_address;
                 $fromName = $alias->name ?: $alias->email_address;
@@ -561,7 +634,7 @@ class GmailService implements EmailProviderInterface
         }
 
         $headers = [];
-        
+
         // Encode the From name if it contains non-ASCII characters
         $encodedFromName = $this->encodeHeader($fromName);
         $headers[] = "From: {$encodedFromName} <{$fromEmail}>";
@@ -578,7 +651,7 @@ class GmailService implements EmailProviderInterface
         }
 
         // Encode subject if it contains non-ASCII characters
-        $headers[] = "Subject: " . $this->encodeHeader($subject);
+        $headers[] = 'Subject: '.$this->encodeHeader($subject);
         $headers[] = 'MIME-Version: 1.0';
         $headers[] = 'Content-Type: text/plain; charset=utf-8';
         $headers[] = 'Content-Transfer-Encoding: quoted-printable';
@@ -649,7 +722,7 @@ class GmailService implements EmailProviderInterface
             $rawMessage .= $body;
 
             // Encode the message
-            $message->setRaw(base64url_encode($rawMessage));
+            $message->setRaw($this->base64url_encode($rawMessage));
 
             if ($threadId) {
                 $message->setThreadId($threadId);
@@ -661,7 +734,6 @@ class GmailService implements EmailProviderInterface
 
             // Save the draft
             $createdDraft = $this->gmail->users_drafts->create('me', $draft);
-
 
             return $createdDraft->getId();
 
@@ -688,22 +760,22 @@ class GmailService implements EmailProviderInterface
         try {
             // Fetch send-as addresses from Gmail
             $sendAsAddresses = $this->gmail->users_settings_sendAs->listUsersSettingsSendAs('me');
-            
+
             // Get existing aliases for this account
             $existingAliases = $this->emailAccount->aliases()->pluck('email_address')->toArray();
-            
+
             foreach ($sendAsAddresses->getSendAs() as $sendAs) {
                 $emailAddress = $sendAs->getSendAsEmail();
                 $displayName = $sendAs->getDisplayName();
                 $replyToAddress = $sendAs->getReplyToAddress();
                 $isDefault = $sendAs->getIsDefault() ?? false;
                 $verificationStatus = $sendAs->getVerificationStatus();
-                
+
                 // Skip if not verified (unless it's the primary address)
-                if ($verificationStatus !== 'accepted' && !$isDefault) {
+                if ($verificationStatus !== 'accepted' && ! $isDefault) {
                     continue;
                 }
-                
+
                 // Create or update the alias
                 $this->emailAccount->aliases()->updateOrCreate(
                     ['email_address' => $emailAddress],
@@ -718,27 +790,27 @@ class GmailService implements EmailProviderInterface
                         ],
                     ]
                 );
-                
+
                 // Remove from existing aliases array
                 $existingAliases = array_diff($existingAliases, [$emailAddress]);
             }
-            
+
             // Delete aliases that no longer exist in Gmail
-            if (!empty($existingAliases)) {
+            if (! empty($existingAliases)) {
                 $this->emailAccount->aliases()
                     ->whereIn('email_address', $existingAliases)
                     ->delete();
             }
-            
+
         } catch (Exception $e) {
-            Log::error("Failed to sync send-as addresses: " . $e->getMessage());
+            Log::error('Failed to sync send-as addresses: '.$e->getMessage());
         }
     }
 
     /**
      * Get signature for a specific email address (from address)
-     * 
-     * @param string $fromAddress The email address to get signature for
+     *
+     * @param  string  $fromAddress  The email address to get signature for
      * @return string|null The signature HTML or null if not found
      */
     public function getSignature(string $fromAddress): ?string
@@ -748,32 +820,33 @@ class GmailService implements EmailProviderInterface
             $alias = $this->emailAccount->aliases()
                 ->where('email_address', $fromAddress)
                 ->first();
-            
+
             if ($alias && isset($alias->settings['signature'])) {
                 return $alias->settings['signature'];
             }
-            
+
             // If not in database, fetch from Gmail API
             $sendAsAddresses = $this->gmail->users_settings_sendAs->listUsersSettingsSendAs('me');
-            
+
             foreach ($sendAsAddresses->getSendAs() as $sendAs) {
                 if ($sendAs->getSendAsEmail() === $fromAddress) {
                     $signature = $sendAs->getSignature();
-                    
+
                     // Update the database with the signature
                     if ($alias) {
                         $settings = $alias->settings;
                         $settings['signature'] = $signature;
                         $alias->update(['settings' => $settings]);
                     }
-                    
+
                     return $signature;
                 }
             }
-            
+
             return null;
         } catch (Exception $e) {
-            Log::error("Failed to get signature for {$fromAddress}: " . $e->getMessage());
+            Log::error("Failed to get signature for {$fromAddress}: ".$e->getMessage());
+
             return null;
         }
     }
@@ -781,7 +854,7 @@ class GmailService implements EmailProviderInterface
     /**
      * Fetch email IDs only (for batch processing)
      */
-    public function fetchEmailIds(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false): array
+    public function fetchEmailIds(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false, ?string $folder = null): array
     {
         if (! $this->isAuthenticated()) {
             return ['ids' => [], 'next_page_token' => null, 'success' => false];
@@ -795,16 +868,11 @@ class GmailService implements EmailProviderInterface
                 'includeSpamTrash' => false,
             ];
 
-            // Build base query
-            $query = 'in:inbox';
+            // Build base query based on folder
+            $query = $this->buildGmailQuery($folder);
 
-            // Limit is now handled by maxResults parameter
-            // No date filter - fetching most recent emails up to the limit
-
-            // Add unread filter if not fetching all
-            if (! $fetchAll) {
-                $query .= ' is:unread';
-            }
+            // Note: We removed the unread filter to properly track read/unread status
+            // The is_read field will be set based on the presence of UNREAD label
 
             $params['q'] = $query;
 
@@ -820,7 +888,6 @@ class GmailService implements EmailProviderInterface
             foreach ($messages as $message) {
                 $messageIds[] = $message->getId();
             }
-
 
             return [
                 'ids' => $messageIds,
@@ -862,11 +929,11 @@ class GmailService implements EmailProviderInterface
         try {
             $attachment = $this->gmail->users_messages_attachments->get('me', $messageId, $attachmentId);
             $data = $attachment->getData();
-            
+
             if ($data) {
                 return $this->base64url_decode($data);
             }
-            
+
             return null;
         } catch (Exception $e) {
             Log::error('Failed to download Gmail attachment', [
@@ -874,7 +941,7 @@ class GmailService implements EmailProviderInterface
                 'attachment_id' => $attachmentId,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return null;
         }
     }
@@ -882,7 +949,7 @@ class GmailService implements EmailProviderInterface
     /**
      * Set up Gmail Push Notifications (watch)
      * This registers a watch on the user's mailbox to receive push notifications via Pub/Sub
-     * 
+     *
      * @return bool Success status
      */
     public function setupWatch(): bool
@@ -890,92 +957,90 @@ class GmailService implements EmailProviderInterface
         try {
             // Check if Pub/Sub topic is configured
             $topicName = config('services.google.pubsub_topic');
-            
-            if (!$topicName) {
+
+            if (! $topicName) {
                 throw new Exception('Google Cloud Pub/Sub topic not configured. Set GOOGLE_PUBSUB_TOPIC in .env');
             }
-            
+
             // Create the watch request
-            $watchRequest = new \Google\Service\Gmail\WatchRequest();
+            $watchRequest = new \Google\Service\Gmail\WatchRequest;
             $watchRequest->setTopicName($topicName);
             $watchRequest->setLabelIds(['INBOX']); // Watch INBOX label
-            
+
             // Optional: Set label filter action to only get notifications for specific labels
             // $watchRequest->setLabelFilterAction('include'); // or 'exclude'
-            
+
             // Execute the watch request
             $watchResponse = $this->gmail->users->watch('me', $watchRequest);
-            
+
             // Generate a verification token for our records
             $watchToken = bin2hex(random_bytes(32));
-            
+
             // Store watch information
             $this->emailAccount->update([
                 'gmail_watch_token' => $watchToken,
-                'gmail_watch_expiration' => $watchResponse->getExpiration() 
+                'gmail_watch_expiration' => $watchResponse->getExpiration()
                     ? \Carbon\Carbon::createFromTimestampMs($watchResponse->getExpiration())
                     : now()->addDays(7),
                 'gmail_history_id' => $watchResponse->getHistoryId(),
             ]);
-            
+
             return true;
-            
+
         } catch (Exception $e) {
             Log::error('Failed to set up Gmail watch', [
                 'account_id' => $this->emailAccount->id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return false;
         }
     }
-    
+
     /**
      * Stop watching the mailbox
-     * 
+     *
      * @return bool Success status
      */
     public function stopWatch(): bool
     {
         try {
             $this->gmail->users->stop('me');
-            
+
             // Clear watch information
             $this->emailAccount->update([
                 'gmail_watch_token' => null,
                 'gmail_watch_expiration' => null,
             ]);
-            
+
             return true;
-            
+
         } catch (Exception $e) {
             Log::error('Failed to stop Gmail watch', [
                 'account_id' => $this->emailAccount->id,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return false;
         }
     }
-    
+
     /**
      * Check if watch needs renewal (expires within 24 hours)
-     * 
-     * @return bool
      */
     public function watchNeedsRenewal(): bool
     {
-        if (!$this->emailAccount->gmail_watch_expiration) {
+        if (! $this->emailAccount->gmail_watch_expiration) {
             return true;
         }
-        
+
         return now()->addDay()->gte($this->emailAccount->gmail_watch_expiration);
     }
-    
+
     /**
      * Renew the watch if needed
-     * 
+     *
      * @return bool Success status
      */
     public function renewWatchIfNeeded(): bool
@@ -983,48 +1048,47 @@ class GmailService implements EmailProviderInterface
         if ($this->watchNeedsRenewal()) {
             // Stop existing watch
             $this->stopWatch();
-            
+
             // Set up new watch
             return $this->setupWatch();
         }
-        
+
         return true;
     }
-    
+
     /**
      * Fetch emails using history ID for incremental sync
      * This is more efficient when using push notifications
-     * 
-     * @param string|null $historyId Starting history ID
-     * @return array
+     *
+     * @param  string|null  $historyId  Starting history ID
      */
     public function fetchEmailsByHistory(?string $historyId = null): array
     {
         try {
-            if (!$historyId) {
+            if (! $historyId) {
                 $historyId = $this->emailAccount->gmail_history_id;
             }
-            
-            if (!$historyId) {
+
+            if (! $historyId) {
                 // Fall back to regular fetch if no history ID
                 return $this->fetchEmails();
             }
-            
+
             $emails = [];
             $pageToken = null;
-            
+
             do {
                 $params = [
                     'startHistoryId' => $historyId,
                     'labelId' => 'INBOX',
                 ];
-                
+
                 if ($pageToken) {
                     $params['pageToken'] = $pageToken;
                 }
-                
+
                 $history = $this->gmail->users_history->listUsersHistory('me', $params);
-                
+
                 // Process history records
                 foreach ($history->getHistory() as $record) {
                     // Process added messages
@@ -1032,48 +1096,36 @@ class GmailService implements EmailProviderInterface
                         foreach ($messagesAdded as $messageAdded) {
                             $message = $messageAdded->getMessage();
                             $fullMessage = $this->gmail->users_messages->get('me', $message->getId());
-                            $emails[] = $this->parseMessage($fullMessage);
+                            $email = $this->processGmailMessage($fullMessage);
+                            if ($email) {
+                                $emails[] = $email;
+                            }
                         }
                     }
-                    
+
                     // You can also handle messagesDeleted, labelsAdded, labelsRemoved, etc.
                 }
-                
+
                 // Update history ID
                 if ($newHistoryId = $history->getHistoryId()) {
                     $this->emailAccount->update(['gmail_history_id' => $newHistoryId]);
                 }
-                
+
                 $pageToken = $history->getNextPageToken();
-                
+
             } while ($pageToken);
-            
+
             return $emails;
-            
+
         } catch (Exception $e) {
             Log::error('Failed to fetch emails by history', [
                 'account_id' => $this->emailAccount->id,
                 'history_id' => $historyId,
                 'error' => $e->getMessage(),
             ]);
-            
+
             // Fall back to regular fetch
             return $this->fetchEmails();
         }
-    }
-}
-
-// Helper functions for base64url encoding/decoding
-if (! function_exists('base64url_decode')) {
-    function base64url_decode($data)
-    {
-        return base64_decode(str_pad(strtr($data, '-_', '+/'), strlen($data) % 4, '=', STR_PAD_RIGHT));
-    }
-}
-
-if (! function_exists('base64url_encode')) {
-    function base64url_encode($data)
-    {
-        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 }

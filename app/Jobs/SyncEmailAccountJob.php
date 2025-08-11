@@ -57,6 +57,23 @@ class SyncEmailAccountJob implements ShouldQueue
     public function handle(EmailSyncService $syncService): void
     {
         try {
+            // Check if this is a webhook-triggered, quick, or manual sync after initial sync
+            $isWebhookSync = $this->options['webhook_sync'] ?? false;
+            $isQuickSync = $this->options['quick_sync'] ?? false;
+            $isManualSync = $this->options['manual_sync'] ?? false;
+            
+            // If this is a webhook, quick, or manual sync, only fetch new emails (small batch)
+            if ($isWebhookSync || $isQuickSync || $isManualSync) {
+                $this->options['limit'] = $this->options['limit'] ?? 10; // Use provided limit or default to 10
+                $this->options['fetch_all'] = $this->options['fetch_all'] ?? false; // Only unread/new emails by default
+                
+                Log::info('Limited sync for new emails only', [
+                    'account_id' => $this->emailAccount->id,
+                    'email' => $this->emailAccount->email_address,
+                    'type' => $isWebhookSync ? 'webhook' : ($isQuickSync ? 'quick' : 'manual'),
+                ]);
+            }
+            
             // Use optimized sync method
             $result = $syncService->syncEmailsOptimized($this->emailAccount, $this->options);
 
@@ -71,13 +88,27 @@ class SyncEmailAccountJob implements ShouldQueue
                     ]
                 ));
 
-                // If there are more emails to sync, dispatch another job
-                if ($result['has_more'] ?? false) {
+                // Only continue syncing for INITIAL sync (when explicitly marked)
+                // Regular syncs, webhook syncs, and quick syncs should NOT paginate
+                $isInitialSync = $this->options['initial_sync'] ?? false;
+                
+                if ($isInitialSync && ($result['has_more'] ?? false)) {
                     $newOptions = $this->options;
                     $newOptions['page_token'] = $result['next_page_token'] ?? null;
 
+                    Log::info('Initial sync continuing with pagination', [
+                        'account_id' => $this->emailAccount->id,
+                        'next_page_token' => $result['next_page_token'] ?? null,
+                    ]);
+
                     self::dispatch($this->emailAccount, $newOptions)
                         ->delay(now()->addSeconds(10)); // Small delay to avoid rate limits
+                } else if (($isWebhookSync || $isQuickSync) && $result['processed'] > 0) {
+                    Log::info('Limited sync completed', [
+                        'account_id' => $this->emailAccount->id,
+                        'processed' => $result['processed'],
+                        'type' => $isWebhookSync ? 'webhook' : 'quick',
+                    ]);
                 }
             } else {
                 Log::error('Email sync job failed', [

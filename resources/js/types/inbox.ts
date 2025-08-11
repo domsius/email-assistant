@@ -9,6 +9,7 @@ export interface EmailMessage {
   status: "pending" | "processing" | "processed";
   isRead: boolean;
   isStarred: boolean;
+  isImportant?: boolean;
   isSelected: boolean;
   language?: string;
   topic?: string;
