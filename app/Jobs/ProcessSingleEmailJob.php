@@ -4,7 +4,9 @@ namespace App\Jobs;
 
 use App\Models\Customer;
 use App\Models\EmailAccount;
+use App\Models\EmailAttachment;
 use App\Models\EmailMessage;
+use App\Services\AttachmentStorageService;
 use App\Services\EmailProviderFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -43,7 +45,7 @@ class ProcessSingleEmailJob implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(EmailProviderFactory $providerFactory): void
+    public function handle(EmailProviderFactory $providerFactory, AttachmentStorageService $attachmentStorage): void
     {
 
 
@@ -158,7 +160,18 @@ class ProcessSingleEmailJob implements ShouldQueue
                 'email_id' => $emailMessage->id,
                 'is_read_saved' => $emailMessage->is_read,
                 'folder_saved' => $emailMessage->folder,
+                'has_attachments' => !empty($emailData['attachments']),
+                'attachment_count' => count($emailData['attachments'] ?? []),
             ]);
+
+            // Process attachments if any
+            if (!empty($emailData['attachments'])) {
+                Log::info('Processing attachments for email', [
+                    'email_id' => $emailMessage->id,
+                    'count' => count($emailData['attachments']),
+                ]);
+                $this->processAttachments($emailMessage, $emailData['attachments'], $this->emailAccount);
+            }
 
             // Broadcast new email event for real-time updates
             try {
@@ -197,5 +210,86 @@ class ProcessSingleEmailJob implements ShouldQueue
     public function backoff(): array
     {
         return [30, 60, 120]; // 30 seconds, 1 minute, 2 minutes
+    }
+
+    /**
+     * Process attachments for an email message
+     */
+    private function processAttachments(EmailMessage $emailMessage, array $attachments, EmailAccount $emailAccount): void
+    {
+        $attachmentStorage = app(AttachmentStorageService::class);
+        $providerFactory = app(EmailProviderFactory::class);
+        
+        foreach ($attachments as $attachmentData) {
+            try {
+                // Check if this is an embedded inline image or needs to be downloaded
+                $content = null;
+
+                if (isset($attachmentData['embedded_data'])) {
+                    // Inline image with embedded data - decode it
+                    $content = base64_decode(str_replace(['-', '_'], ['+', '/'], $attachmentData['embedded_data']));
+                } else {
+                    // Regular attachment - download it
+                    $content = $this->downloadGmailAttachment($emailAccount, $attachmentData, $providerFactory);
+                }
+
+                if ($content) {
+                    // Store the attachment file
+                    $storedPath = $attachmentStorage->storeAttachmentContent(
+                        $content,
+                        $attachmentData['filename'],
+                        $emailAccount->id
+                    );
+
+                    // Create attachment database record
+                    EmailAttachment::create([
+                        'email_message_id' => $emailMessage->id,
+                        'filename' => $attachmentData['filename'],
+                        'content_type' => $attachmentData['content_type'] ?? 'application/octet-stream',
+                        'size' => $attachmentData['size'] ?? strlen($content),
+                        'content_id' => $attachmentData['content_id'] ?? null,
+                        'content_disposition' => $attachmentData['content_disposition'] ?? null,
+                        'storage_path' => $storedPath,
+                    ]);
+                    
+                    Log::info('Attachment saved successfully', [
+                        'email_id' => $emailMessage->id,
+                        'filename' => $attachmentData['filename'],
+                        'size' => $attachmentData['size'] ?? strlen($content),
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Failed to process attachment', [
+                    'filename' => $attachmentData['filename'],
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Download attachment content from Gmail
+     */
+    private function downloadGmailAttachment(EmailAccount $emailAccount, array $attachmentData, EmailProviderFactory $providerFactory): ?string
+    {
+        try {
+            $provider = $providerFactory->createProvider($emailAccount);
+
+            if (method_exists($provider, 'downloadAttachment')) {
+                return $provider->downloadAttachment(
+                    $attachmentData['message_id'],
+                    $attachmentData['attachment_id']
+                );
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::error('Failed to download Gmail attachment', [
+                'attachment_id' => $attachmentData['attachment_id'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 }

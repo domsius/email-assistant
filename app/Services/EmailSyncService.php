@@ -199,7 +199,17 @@ class EmailSyncService extends BaseService
         ]);
 
         // Process attachments if any
+        Log::info('Checking attachments for email', [
+            'email_id' => $emailMessage->id,
+            'has_attachments' => !empty($emailData['attachments']),
+            'attachment_count' => count($emailData['attachments'] ?? [])
+        ]);
+        
         if (! empty($emailData['attachments'])) {
+            Log::info('Processing attachments', [
+                'email_id' => $emailMessage->id,
+                'count' => count($emailData['attachments'])
+            ]);
             $this->processAttachments($emailMessage, $emailData['attachments'], $emailAccount);
         }
 

@@ -227,8 +227,43 @@ class GmailService implements EmailProviderInterface
             // Get email body
             $bodyData = $this->extractBodyFromPayload($fullMessage->getPayload());
 
+            // Check payload structure for debugging
+            $payloadParts = $fullMessage->getPayload()->getParts();
+            Log::info("Gmail payload structure", [
+                "message_id" => $messageId,
+                "has_parts" => !empty($payloadParts), 
+                "parts_count" => count($payloadParts ?? []),
+                "mime_type" => $fullMessage->getPayload()->getMimeType()
+            ]);
+            
+            // Log each part's details
+            if ($payloadParts) {
+                foreach ($payloadParts as $index => $part) {
+                    Log::info("Part $index details", [
+                        "message_id" => $messageId,
+                        "mime_type" => $part->getMimeType(),
+                        "filename" => $part->getFilename(),
+                        "has_body" => !is_null($part->getBody()),
+                        "attachment_id" => $part->getBody() ? $part->getBody()->getAttachmentId() : null,
+                        "body_size" => $part->getBody() ? $part->getBody()->getSize() : 0
+                    ]);
+                }
+            }
+
             // Extract attachments
+            Log::info("About to extract attachments for message: " . $messageId);
             $attachments = $this->extractAttachments($fullMessage);
+            Log::info("Attachments extracted", [
+                "message_id" => $messageId,
+                "count" => count($attachments),
+                "attachments" => array_map(function($att) {
+                    return [
+                        'filename' => $att['filename'] ?? 'unknown',
+                        'size' => $att['size'] ?? 0,
+                        'type' => $att['content_type'] ?? 'unknown'
+                    ];
+                }, $attachments)
+            ]);
 
             // Check if email is read (Gmail uses UNREAD label)
             $labels = $fullMessage->getLabelIds() ?? [];
@@ -288,9 +323,15 @@ class GmailService implements EmailProviderInterface
     {
         $attachments = [];
         $messageId = $message->getId();
+        
+        Log::info("Starting attachment extraction", ["message_id" => $messageId]);
 
         try {
             $this->extractAttachmentsFromPart($message->getPayload(), $attachments, $messageId);
+            Log::info("Finished extraction", [
+                "message_id" => $messageId,
+                "attachment_count" => count($attachments)
+            ]);
         } catch (Exception $e) {
             Log::error('Error extracting attachments: '.$e->getMessage(), [
                 'message_id' => $messageId,
@@ -306,8 +347,18 @@ class GmailService implements EmailProviderInterface
         $filename = $part->getFilename();
         $mimeType = $part->getMimeType();
         $body = $part->getBody();
-        $attachmentId = $body->getAttachmentId();
+        $attachmentId = $body ? $body->getAttachmentId() : null;
         $headers = $part->getHeaders();
+        
+        Log::info("Processing part", [
+            "message_id" => $messageId,
+            "filename" => $filename,
+            "mime_type" => $mimeType,
+            "has_attachment_id" => !empty($attachmentId),
+            "attachment_id_value" => $attachmentId,
+            "body_size" => $body ? $body->getSize() : 0,
+            "headers_count" => count($headers ?? [])
+        ]);
 
         // Check if this is an attachment (either with filename or inline image)
         $isAttachment = false;
@@ -332,6 +383,12 @@ class GmailService implements EmailProviderInterface
         // Also consider parts with filenames or attachment IDs as attachments
         if ($filename || $attachmentId) {
             $isAttachment = true;
+            Log::info("Part identified as attachment", [
+                "message_id" => $messageId,
+                "reason" => $filename ? "has filename" : "has attachment ID",
+                "filename" => $filename,
+                "attachment_id" => $attachmentId
+            ]);
         }
 
         // For inline images without filenames, check if it's an image type
@@ -365,6 +422,11 @@ class GmailService implements EmailProviderInterface
                 ];
 
                 $attachments[] = $attachment;
+                Log::info("Found inline attachment", [
+                    "filename" => $attachment["filename"],
+                    "type" => $attachment["content_type"],
+                    "size" => $attachment["size"]
+                ]);
             } elseif ($attachmentId) {
                 // Regular attachment with attachment ID
                 $attachment = [
@@ -378,6 +440,12 @@ class GmailService implements EmailProviderInterface
                 ];
 
                 $attachments[] = $attachment;
+                Log::info("Found regular attachment", [
+                    "filename" => $attachment["filename"],
+                    "type" => $attachment["content_type"],
+                    "size" => $attachment["size"],
+                    "attachment_id" => $attachmentId
+                ]);
             } else {
                 Log::warning('Gmail: Skipping attachment without attachment ID or embedded data', [
                     'message_id' => $messageId,
@@ -391,6 +459,11 @@ class GmailService implements EmailProviderInterface
         // Recursively check parts
         $parts = $part->getParts();
         if ($parts) {
+            Log::info("Part has sub-parts", [
+                "message_id" => $messageId,
+                "parent_mime_type" => $mimeType,
+                "sub_parts_count" => count($parts)
+            ]);
             foreach ($parts as $subPart) {
                 $this->extractAttachmentsFromPart($subPart, $attachments, $messageId);
             }

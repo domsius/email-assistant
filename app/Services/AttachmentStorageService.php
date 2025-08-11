@@ -175,9 +175,17 @@ class AttachmentStorageService
         $hash = hash('sha256', $content);
         $storagePath = "attachments/{$emailAccountId}/" . date('Y/m/d') . "/{$hash}.{$extension}";
         
+        // Ensure directory exists (Storage::put should handle this, but let's be explicit)
+        $directory = dirname($storagePath);
+        Storage::disk($this->disk)->makeDirectory($directory);
         
         // Store the file
         if (Storage::disk($this->disk)->put($storagePath, $content)) {
+            Log::info('Attachment saved to storage', [
+                'filename' => $filename,
+                'path' => $storagePath,
+                'size' => strlen($content)
+            ]);
             return $storagePath;
         }
         

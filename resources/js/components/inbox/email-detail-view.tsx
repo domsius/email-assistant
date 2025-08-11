@@ -534,6 +534,13 @@ ${email.content || email.plainTextContent || email.snippet || ""}`;
                     key={attachment.id} 
                     href={`/emails/${email.id}/attachments/${attachment.id}/download`}
                     download={attachment.filename}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const downloadUrl = `/emails/${email.id}/attachments/${attachment.id}/download`;
+                      console.log('Downloading attachment:', downloadUrl);
+                      window.location.href = downloadUrl;
+                    }}
                     className="group flex items-center gap-2 p-2 bg-background rounded border hover:bg-muted/50 cursor-pointer transition-colors relative"
                   >
                     <div className="h-8 w-8 bg-primary/10 rounded flex items-center justify-center">

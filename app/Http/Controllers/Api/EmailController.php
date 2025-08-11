@@ -434,29 +434,63 @@ class EmailController extends Controller
     /**
      * Download an email attachment
      */
-    public function downloadAttachment(EmailMessage $email, EmailAttachment $attachment)
+    public function downloadAttachment($email, $attachment)
     {
+        // Resolve models if IDs are passed
+        if (!($email instanceof EmailMessage)) {
+            $email = EmailMessage::findOrFail($email);
+        }
+        if (!($attachment instanceof EmailAttachment)) {
+            $attachment = EmailAttachment::findOrFail($attachment);
+        }
+        
+        Log::info('Download attachment requested', [
+            'email_id' => $email->id,
+            'attachment_id' => $attachment->id,
+            'user_id' => auth()->id(),
+            'user_company' => auth()->user() ? auth()->user()->company_id : 'not-authenticated',
+            'email_company' => $email->emailAccount->company_id,
+        ]);
+        
         // Ensure the attachment belongs to the email
         if ($attachment->email_message_id !== $email->id) {
+            Log::error('Attachment does not belong to email', [
+                'attachment_email_id' => $attachment->email_message_id,
+                'requested_email_id' => $email->id,
+            ]);
             abort(404);
         }
 
         // Ensure user has access to this email
         if ($email->emailAccount->company_id !== auth()->user()->company_id) {
+            Log::error('User does not have access to email', [
+                'user_company' => auth()->user()->company_id,
+                'email_company' => $email->emailAccount->company_id,
+            ]);
             abort(403);
         }
 
         // Check if we have a storage path
         if (! $attachment->storage_path) {
+            Log::error('No storage path for attachment', ['attachment_id' => $attachment->id]);
             abort(404, 'Attachment file not found');
         }
 
+        Log::info('Attempting to get stream', ['storage_path' => $attachment->storage_path]);
+        
         // Get the file stream
         $stream = $this->attachmentStorage->getStream($attachment->storage_path);
 
         if (! $stream) {
+            Log::error('Could not get stream for attachment', ['storage_path' => $attachment->storage_path]);
             abort(404, 'Attachment file not found');
         }
+
+        Log::info('Streaming attachment', [
+            'filename' => $attachment->filename,
+            'size' => $attachment->size,
+            'content_type' => $attachment->content_type,
+        ]);
 
         return response()->stream(function () use ($stream) {
             fpassthru($stream);
