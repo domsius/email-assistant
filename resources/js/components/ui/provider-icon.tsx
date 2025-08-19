@@ -71,6 +71,24 @@ const providerMap: Record<string, ProviderConfig> = {
     iconColor: "text-gray-600 dark:text-gray-400",
     label: "iCloud",
   },
+  imap: {
+    icon: Mail,
+    bgColor: "bg-slate-100 dark:bg-slate-900/20",
+    iconColor: "text-slate-600 dark:text-slate-400",
+    label: "IMAP/SMTP",
+  },
+  zoho: {
+    icon: Mail,
+    bgColor: "bg-yellow-100 dark:bg-yellow-900/20",
+    iconColor: "text-yellow-600 dark:text-yellow-400",
+    label: "Zoho Mail",
+  },
+  protonmail: {
+    icon: Mail,
+    bgColor: "bg-indigo-100 dark:bg-indigo-900/20",
+    iconColor: "text-indigo-600 dark:text-indigo-400",
+    label: "ProtonMail",
+  },
 };
 
 // Default configuration for unknown providers

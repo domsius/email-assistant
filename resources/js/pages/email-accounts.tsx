@@ -59,7 +59,7 @@ interface SyncProgress {
 interface EmailAccount {
   id: number;
   email: string;
-  provider: "gmail" | "outlook";
+  provider: "gmail" | "outlook" | "imap";
   status: "active" | "syncing" | "error" | "inactive";
   lastSyncAt?: string;
   createdAt: string;
@@ -203,6 +203,11 @@ export default function EmailAccounts({
     window.location.href = "/email-accounts/connect/outlook";
   };
 
+  const handleAddImap = () => {
+    // Navigate to IMAP setup form
+    window.location.href = "/email-accounts/imap/setup";
+  };
+
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Email Accounts" />
@@ -258,6 +263,31 @@ export default function EmailAccounts({
                       <div className="font-medium">Connect Outlook</div>
                       <div className="text-sm text-muted-foreground">
                         Sign in with your Microsoft account
+                      </div>
+                    </div>
+                  </div>
+                </Button>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      Or connect via IMAP/SMTP
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="justify-start h-auto p-4"
+                  onClick={handleAddImap}
+                >
+                  <div className="flex items-center gap-3">
+                    <Mail className="h-5 w-5 text-muted-foreground" />
+                    <div className="text-left">
+                      <div className="font-medium">Other Email Provider</div>
+                      <div className="text-sm text-muted-foreground">
+                        Yahoo, iCloud, Zoho, or any IMAP/SMTP server
                       </div>
                     </div>
                   </div>

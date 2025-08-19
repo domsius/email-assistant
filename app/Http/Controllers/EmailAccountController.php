@@ -92,8 +92,13 @@ class EmailAccountController extends Controller
 
     public function connect(Request $request, string $provider): RedirectResponse
     {
-        if (! in_array($provider, ['gmail', 'outlook'])) {
+        if (! in_array($provider, ['gmail', 'outlook', 'imap'])) {
             abort(404);
+        }
+        
+        // IMAP doesn't use OAuth, redirect to setup form
+        if ($provider === 'imap') {
+            return redirect()->route('email-accounts.imap.setup');
         }
 
         $user = auth()->user();
@@ -202,5 +207,130 @@ class EmailAccountController extends Controller
         ]);
 
         return back()->with('success', 'Email sync initiated for '.$emailAccount->email_address);
+    }
+
+    /**
+     * Store IMAP account configuration
+     */
+    public function storeImap(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'email_address' => 'required|email',
+            'sender_name' => 'nullable|string|max:255',
+            'imap_host' => 'required|string',
+            'imap_port' => 'required|integer',
+            'imap_encryption' => 'required|in:ssl,tls,none',
+            'imap_username' => 'required|string',
+            'imap_password' => 'required|string',
+            'smtp_host' => 'required|string',
+            'smtp_port' => 'required|integer',
+            'smtp_encryption' => 'required|in:ssl,tls,none',
+            'smtp_username' => 'nullable|string',
+            'smtp_password' => 'nullable|string',
+        ]);
+
+        $user = auth()->user();
+        $companyId = $user->company_id;
+
+        // Check if account already exists
+        $existingAccount = EmailAccount::where('company_id', $companyId)
+            ->where('user_id', $user->id)
+            ->where('email_address', $validated['email_address'])
+            ->first();
+
+        if ($existingAccount) {
+            return back()->withErrors(['email_address' => 'This email account is already connected.']);
+        }
+
+        // Create the email account
+        $emailAccount = EmailAccount::create([
+            'company_id' => $companyId,
+            'user_id' => $user->id,
+            'email_address' => $validated['email_address'],
+            'sender_name' => $validated['sender_name'],
+            'provider' => 'imap',
+            'imap_host' => $validated['imap_host'],
+            'imap_port' => $validated['imap_port'],
+            'imap_encryption' => $validated['imap_encryption'],
+            'imap_password' => $validated['imap_password'],
+            'smtp_host' => $validated['smtp_host'],
+            'smtp_port' => $validated['smtp_port'],
+            'smtp_encryption' => $validated['smtp_encryption'],
+            'smtp_password' => $validated['smtp_password'] ?? $validated['imap_password'],
+            'is_active' => false,
+        ]);
+
+        // Test the connection
+        try {
+            $provider = $this->providerFactory->createProvider($emailAccount);
+            
+            if ($provider->refreshToken()) { // This tests the connection for IMAP
+                $emailAccount->update(['is_active' => true]);
+                
+                // Initiate initial sync
+                SyncEmailAccountJob::dispatch($emailAccount, [
+                    'manual_sync' => true,
+                    'limit' => 25,
+                    'fetch_all' => false,
+                ]);
+
+                return redirect()->route('email-accounts.index')
+                    ->with('success', 'IMAP account connected successfully!');
+            } else {
+                $emailAccount->delete();
+                return back()->withErrors(['connection' => 'Failed to connect to IMAP server. Please check your settings.']);
+            }
+        } catch (\Exception $e) {
+            $emailAccount->delete();
+            Log::error('IMAP connection failed', ['error' => $e->getMessage()]);
+            return back()->withErrors(['connection' => 'Connection failed: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Show IMAP configuration form
+     */
+    public function showImapForm(): Response
+    {
+        return Inertia::render('EmailAccounts/ImapSetup', [
+            'commonProviders' => [
+                [
+                    'name' => 'Yahoo Mail',
+                    'imap_host' => 'imap.mail.yahoo.com',
+                    'imap_port' => 993,
+                    'imap_encryption' => 'ssl',
+                    'smtp_host' => 'smtp.mail.yahoo.com',
+                    'smtp_port' => 465,
+                    'smtp_encryption' => 'ssl',
+                ],
+                [
+                    'name' => 'iCloud Mail',
+                    'imap_host' => 'imap.mail.me.com',
+                    'imap_port' => 993,
+                    'imap_encryption' => 'ssl',
+                    'smtp_host' => 'smtp.mail.me.com',
+                    'smtp_port' => 587,
+                    'smtp_encryption' => 'tls',
+                ],
+                [
+                    'name' => 'Zoho Mail',
+                    'imap_host' => 'imap.zoho.com',
+                    'imap_port' => 993,
+                    'imap_encryption' => 'ssl',
+                    'smtp_host' => 'smtp.zoho.com',
+                    'smtp_port' => 465,
+                    'smtp_encryption' => 'ssl',
+                ],
+                [
+                    'name' => 'ProtonMail Bridge',
+                    'imap_host' => '127.0.0.1',
+                    'imap_port' => 1143,
+                    'imap_encryption' => 'none',
+                    'smtp_host' => '127.0.0.1',
+                    'smtp_port' => 1025,
+                    'smtp_encryption' => 'none',
+                ],
+            ],
+        ]);
     }
 }

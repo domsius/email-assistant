@@ -90,6 +90,7 @@ export default function KnowledgeBase({
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Handle flash messages
   useEffect(() => {
@@ -121,6 +122,46 @@ export default function KnowledgeBase({
       form.setData("file", file);
       if (!form.data.title) {
         form.setData("title", file.name.replace(/\.[^/.]+$/, ""));
+      }
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      const allowedTypes = ['.pdf', '.docx', '.txt', '.md'];
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+      
+      if (allowedTypes.includes(fileExtension)) {
+        setSelectedFile(file);
+        form.setData("file", file);
+        if (!form.data.title) {
+          form.setData("title", file.name.replace(/\.[^/.]+$/, ""));
+        }
+      } else {
+        toast.error("Please upload a PDF, DOCX, TXT, or MD file");
       }
     }
   };
@@ -201,18 +242,62 @@ export default function KnowledgeBase({
                     <label htmlFor="file" className="text-sm font-medium">
                       File
                     </label>
-                    <Input
-                      id="file"
-                      type="file"
-                      accept=".pdf,.docx,.txt,.md"
-                      onChange={handleFileChange}
-                      required
-                    />
+                    <div
+                      className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
+                        isDragging
+                          ? "border-primary bg-primary/5"
+                          : "border-muted-foreground/25 hover:border-muted-foreground/50"
+                      }`}
+                      onDragEnter={handleDragEnter}
+                      onDragLeave={handleDragLeave}
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                    >
+                      <Input
+                        id="file"
+                        type="file"
+                        accept=".pdf,.docx,.txt,.md"
+                        onChange={handleFileChange}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        required={!selectedFile}
+                      />
+                      <div className="text-center">
+                        <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                        <p className="text-sm font-medium">
+                          {isDragging
+                            ? "Drop the file here"
+                            : "Drag & drop a file here, or click to browse"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          PDF, DOCX, TXT, or MD files
+                        </p>
+                      </div>
+                    </div>
                     {selectedFile && (
-                      <p className="text-sm text-muted-foreground">
-                        Selected: {selectedFile.name} (
-                        {formatFileSize(selectedFile.size)})
-                      </p>
+                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">
+                              {selectedFile.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatFileSize(selectedFile.size)}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedFile(null);
+                            form.setData("file", null);
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>

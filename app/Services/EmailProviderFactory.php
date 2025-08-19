@@ -12,6 +12,7 @@ class EmailProviderFactory
         return match ($emailAccount->provider) {
             'gmail' => app(GmailService::class, ['emailAccount' => $emailAccount]),
             'outlook' => app(OutlookService::class, ['emailAccount' => $emailAccount]),
+            'imap' => app(ImapService::class, ['emailAccount' => $emailAccount]),
             default => throw new InvalidArgumentException("Unsupported email provider: {$emailAccount->provider}")
         };
     }
@@ -24,12 +25,20 @@ class EmailProviderFactory
                 'icon' => 'gmail',
                 'scopes' => ['https://www.googleapis.com/auth/gmail.readonly'],
                 'oauth_url' => 'https://accounts.google.com/o/oauth2/auth',
+                'auth_type' => 'oauth',
             ],
             'outlook' => [
                 'name' => 'Microsoft Outlook',
                 'icon' => 'outlook',
                 'scopes' => ['https://graph.microsoft.com/Mail.Read'],
                 'oauth_url' => 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+                'auth_type' => 'oauth',
+            ],
+            'imap' => [
+                'name' => 'IMAP/SMTP',
+                'icon' => 'mail',
+                'auth_type' => 'password',
+                'description' => 'Connect any email account that supports IMAP/SMTP',
             ],
         ];
     }

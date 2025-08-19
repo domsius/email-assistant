@@ -17,6 +17,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Email Accounts routes
     Route::get('email-accounts', [\App\Http\Controllers\EmailAccountController::class, 'index'])->name('email-accounts');
     Route::get('email-accounts/connect/{provider}', [\App\Http\Controllers\EmailAccountController::class, 'connect'])->name('email-accounts.connect');
+    Route::get('email-accounts/callback/{provider}', [\App\Http\Controllers\EmailAccountController::class, 'callback'])->name('email-accounts.callback');
+    Route::get('email-accounts/imap/setup', [\App\Http\Controllers\EmailAccountController::class, 'showImapForm'])->name('email-accounts.imap.setup');
+    Route::post('email-accounts/imap', [\App\Http\Controllers\EmailAccountController::class, 'storeImap'])->name('email-accounts.imap.store');
     Route::delete('email-accounts/{emailAccount}', [\App\Http\Controllers\EmailAccountController::class, 'remove'])->name('email-accounts.remove');
     Route::post('email-accounts/{emailAccount}/sync', [\App\Http\Controllers\EmailAccountController::class, 'sync'])->name('email-accounts.sync');
 

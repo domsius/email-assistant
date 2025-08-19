@@ -15,6 +15,7 @@ class EmailAccount extends Model
         'company_id',
         'user_id',
         'email_address',
+        'sender_name',
         'provider',
         'provider_account_id',
         'access_token',
@@ -33,19 +34,35 @@ class EmailAccount extends Model
         'gmail_watch_token',
         'gmail_watch_expiration',
         'gmail_history_id',
+        // IMAP settings
+        'imap_host',
+        'imap_port',
+        'imap_encryption',
+        'imap_password',
+        'imap_validate_cert',
+        // SMTP settings
+        'smtp_host',
+        'smtp_port',
+        'smtp_encryption',
+        'smtp_password',
     ];
 
     protected $casts = [
         'provider_settings' => 'encrypted',
         'access_token' => 'encrypted',
         'refresh_token' => 'encrypted',
+        'imap_password' => 'encrypted',
+        'smtp_password' => 'encrypted',
         'token_expires_at' => 'datetime',
         'sync_started_at' => 'datetime',
         'sync_completed_at' => 'datetime',
         'last_sync_at' => 'datetime',
         'is_active' => 'boolean',
+        'imap_validate_cert' => 'boolean',
         'sync_progress' => 'integer',
         'sync_total' => 'integer',
+        'imap_port' => 'integer',
+        'smtp_port' => 'integer',
     ];
 
     public function company(): BelongsTo

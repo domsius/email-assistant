@@ -58,6 +58,7 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
   });
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [replySignature, setReplySignature] = useState<string>("");
+  const [preservedSignature, setPreservedSignature] = useState<string>("");
   
   // If this is a draft, set up reply state for editing
   useEffect(() => {
@@ -138,6 +139,7 @@ export function EmailDetailView({ email, onBackToList }: EmailDetailViewProps) {
               console.log('Loaded sanitized reply signature:', sanitizedSignature.substring(0, 100) + '...');
               
               setReplySignature(sanitizedSignature);
+              setPreservedSignature(sanitizedSignature); // Store the signature separately
               
               // Insert signature before the citation/quoted text
               let newBody = replyState.body;
@@ -289,6 +291,7 @@ ${email.content || email.plainTextContent || email.snippet || ""}`;
       body: ""
     });
     setReplySignature("");
+    setPreservedSignature("");
   }, []);
 
   const handleSendReply = useCallback(() => {
@@ -376,9 +379,21 @@ ${email.content || email.plainTextContent || email.snippet || ""}`;
         // Preserve existing signature and citation
         const currentBody = replyState.body || "";
         
-        // Look for existing signature
-        const signaturePattern = /<div[^>]*class="[^"]*email-signature[^"]*"[^>]*>[\s\S]*$/i;
-        const signatureMatch = currentBody.match(signaturePattern);
+        // Look for existing signature - check multiple patterns
+        const signaturePatterns = [
+          /<div[^>]*class="[^"]*email-signature[^"]*"[^>]*>[\s\S]*$/i,
+          // Also look for the signature if it's stored without the class
+          // Check for common signature indicators
+          /(<br><br>)?(<div[^>]*>)?-{2,}[^-][\s\S]*?(Wyrd[iI]t|<img[^>]*wyrdit[^>]*>)[\s\S]*$/i,
+          // Check for signature with phone/email pattern
+          /(<br><br>)?[\s\S]*?(\+370[\s\S]*?@[\s\S]*?\.(com|lt|eu|org))[\s\S]*$/i
+        ];
+        
+        let signatureMatch = null;
+        for (const pattern of signaturePatterns) {
+          signatureMatch = currentBody.match(pattern);
+          if (signatureMatch) break;
+        }
         
         // Look for existing citation (reply quote)
         const citationPattern = /<div style="border-left:[^"]*"[^>]*>[\s\S]*$/i;
@@ -391,15 +406,20 @@ ${email.content || email.plainTextContent || email.snippet || ""}`;
         let finalBody = aiContent;
         
         // Remove any existing signature from AI content (shouldn't have one, but just in case)
-        finalBody = finalBody.replace(signaturePattern, '');
+        for (const pattern of signaturePatterns) {
+          finalBody = finalBody.replace(pattern, '');
+        }
         
         // Build the final body: AI content + signature + citation/forward
-        if (signatureMatch && (citationMatch || forwardMatch)) {
+        // Use the preserved signature if we couldn't find it in the body
+        const signatureToUse = signatureMatch ? signatureMatch[0] : preservedSignature;
+        
+        if (signatureToUse && (citationMatch || forwardMatch)) {
           // We have both signature and citation/forward - arrange them properly
           console.log("Preserving signature and citation/forward");
           
           // Add signature after AI content
-          finalBody = finalBody + '<br><br>' + signatureMatch[0];
+          finalBody = finalBody + '<br><br>' + signatureToUse;
           
           // Add citation/forward after signature
           if (citationMatch) {
@@ -407,10 +427,10 @@ ${email.content || email.plainTextContent || email.snippet || ""}`;
           } else if (forwardMatch) {
             finalBody = finalBody + '<br><br>' + forwardMatch[0];
           }
-        } else if (signatureMatch) {
+        } else if (signatureToUse) {
           // Only signature, no citation
           console.log("Preserving signature only");
-          finalBody = finalBody + '<br><br>' + signatureMatch[0];
+          finalBody = finalBody + '<br><br>' + signatureToUse;
         } else if (citationMatch || forwardMatch) {
           // Only citation/forward, no signature (shouldn't happen normally)
           console.log("Preserving citation/forward only");
