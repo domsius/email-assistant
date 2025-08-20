@@ -56,15 +56,9 @@ class InboxController extends Controller
 
         $selectedAccountId = $validated['account'] ?? null;
 
-        // Auto-select first active account if none specified
-        if ($selectedAccountId === null) {
-            $emailAccounts = $this->emailService->getEmailAccounts($user->company_id);
-            $firstActiveAccount = $emailAccounts->firstWhere('is_active', true);
-
-            if ($firstActiveAccount) {
-                $selectedAccountId = $firstActiveAccount['id'];
-            }
-        }
+        // When no account is specified, show emails from ALL accounts
+        // This prevents issues where adding a new account hides emails from existing accounts
+        // Users can still filter by specific account using the account parameter
 
         $folder = $validated['folder'] ?? 'inbox';
         $search = $validated['search'] ?? null;
