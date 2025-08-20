@@ -214,20 +214,41 @@ class EmailAccountController extends Controller
      */
     public function storeImap(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'email_address' => 'required|email',
-            'sender_name' => 'nullable|string|max:255',
-            'imap_host' => 'required|string',
-            'imap_port' => 'required|integer',
-            'imap_encryption' => 'required|in:ssl,tls,none',
-            'imap_username' => 'required|string',
-            'imap_password' => 'required|string',
-            'smtp_host' => 'required|string',
-            'smtp_port' => 'required|integer',
-            'smtp_encryption' => 'required|in:ssl,tls,none',
-            'smtp_username' => 'nullable|string',
-            'smtp_password' => 'nullable|string',
+        Log::info('🔍 IMAP Store Debug - Request received', [
+            'method' => $request->method(),
+            'url' => $request->url(),
+            'all_data' => $request->all(),
+            'user_id' => auth()->id(),
         ]);
+
+        try {
+            $validated = $request->validate([
+                'email_address' => 'required|email',
+                'sender_name' => 'nullable|string|max:255',
+                'imap_host' => 'required|string',
+                'imap_port' => 'required|integer',
+                'imap_encryption' => 'required|in:ssl,tls,none',
+                'imap_username' => 'required|string',
+                'imap_password' => 'required|string',
+                'smtp_host' => 'required|string',
+                'smtp_port' => 'required|integer',
+                'smtp_encryption' => 'required|in:ssl,tls,none',
+                'smtp_username' => 'nullable|string',
+                'smtp_password' => 'nullable|string',
+            ]);
+
+            Log::info('✅ IMAP Store Debug - Validation passed', [
+                'validated_data' => array_diff_key($validated, ['imap_password' => '', 'smtp_password' => '']), // Hide passwords
+                'has_imap_password' => !empty($validated['imap_password']),
+                'has_smtp_password' => !empty($validated['smtp_password']),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('❌ IMAP Store Debug - Validation failed', [
+                'errors' => $e->errors(),
+                'request_data' => array_diff_key($request->all(), ['imap_password' => '', 'smtp_password' => '']),
+            ]);
+            throw $e;
+        }
 
         $user = auth()->user();
         $companyId = $user->company_id;
@@ -252,37 +273,52 @@ class EmailAccountController extends Controller
             'imap_host' => $validated['imap_host'],
             'imap_port' => $validated['imap_port'],
             'imap_encryption' => $validated['imap_encryption'],
+            'imap_username' => $validated['imap_username'],  // Store IMAP username
             'imap_password' => $validated['imap_password'],
             'smtp_host' => $validated['smtp_host'],
             'smtp_port' => $validated['smtp_port'],
             'smtp_encryption' => $validated['smtp_encryption'],
+            'smtp_username' => $validated['smtp_username'] ?? $validated['imap_username'],  // Store SMTP username
             'smtp_password' => $validated['smtp_password'] ?? $validated['imap_password'],
             'is_active' => false,
         ]);
 
+        Log::info('📧 IMAP Store Debug - EmailAccount created', [
+            'account_id' => $emailAccount->id,
+            'email_address' => $emailAccount->email_address,
+            'provider' => $emailAccount->provider,
+        ]);
+
         // Test the connection
         try {
+            Log::info('🔌 IMAP Store Debug - Testing connection...');
             $provider = $this->providerFactory->createProvider($emailAccount);
             
             if ($provider->refreshToken()) { // This tests the connection for IMAP
+                Log::info('✅ IMAP Store Debug - Connection test successful');
                 $emailAccount->update(['is_active' => true]);
                 
-                // Initiate initial sync
+                // Initiate initial sync - fetch all emails for IMAP
                 SyncEmailAccountJob::dispatch($emailAccount, [
-                    'manual_sync' => true,
-                    'limit' => 25,
-                    'fetch_all' => false,
+                    'initial_sync' => true,  // Mark as initial sync
+                    'limit' => 50,  // Fetch more emails on initial sync
+                    'fetch_all' => true,  // Fetch ALL emails, not just unseen
                 ]);
 
-                return redirect()->route('email-accounts.index')
+                Log::info('🎉 IMAP Store Debug - Account setup completed successfully');
+                return redirect()->route('email-accounts')
                     ->with('success', 'IMAP account connected successfully!');
             } else {
+                Log::error('❌ IMAP Store Debug - Connection test failed (refreshToken returned false)');
                 $emailAccount->delete();
                 return back()->withErrors(['connection' => 'Failed to connect to IMAP server. Please check your settings.']);
             }
         } catch (\Exception $e) {
+            Log::error('💥 IMAP Store Debug - Connection test threw exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             $emailAccount->delete();
-            Log::error('IMAP connection failed', ['error' => $e->getMessage()]);
             return back()->withErrors(['connection' => 'Connection failed: ' . $e->getMessage()]);
         }
     }

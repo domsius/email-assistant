@@ -126,7 +126,29 @@ export default function ImapSetup({ commonProviders }: ImapSetupProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    post("/email-accounts/imap");
+    console.log("🔍 ImapSetup Form Submission Debug:");
+    console.log("📝 Form data:", data);
+    console.log("✅ Required fields check:", {
+      email_address: !!data.email_address,
+      imap_host: !!data.imap_host,
+      imap_username: !!data.imap_username,
+      imap_password: !!data.imap_password,
+      smtp_host: !!data.smtp_host,
+    });
+    console.log("🚀 Submitting to: /email-accounts/imap");
+    
+    post("/email-accounts/imap", {
+      onSuccess: () => {
+        console.log("✅ Form submission successful!");
+      },
+      onError: (errors) => {
+        console.log("❌ Form submission failed:");
+        console.log("Validation errors:", errors);
+      },
+      onFinish: () => {
+        console.log("🏁 Form submission finished (success or error)");
+      }
+    });
   };
 
   const handleCancel = () => {
@@ -221,11 +243,13 @@ export default function ImapSetup({ commonProviders }: ImapSetupProps) {
                         placeholder="your@email.com"
                         value={data.email_address}
                         onChange={(e) => {
-                          setData("email_address", e.target.value);
-                          // Auto-fill username if not set
-                          if (!data.imap_username) {
-                            setData("imap_username", e.target.value);
-                          }
+                          const email = e.target.value;
+                          setData(prev => ({
+                            ...prev,
+                            email_address: email,
+                            // Auto-fill username if not set
+                            imap_username: prev.imap_username || email
+                          }));
                         }}
                         required
                       />

@@ -726,7 +726,13 @@ class GmailService implements EmailProviderInterface
         // Encode subject if it contains non-ASCII characters
         $headers[] = 'Subject: '.$this->encodeHeader($subject);
         $headers[] = 'MIME-Version: 1.0';
-        $headers[] = 'Content-Type: text/plain; charset=utf-8';
+        
+        // Check if body contains HTML
+        if (preg_match('/<[^>]+>/', $body)) {
+            $headers[] = 'Content-Type: text/html; charset=utf-8';
+        } else {
+            $headers[] = 'Content-Type: text/plain; charset=utf-8';
+        }
         $headers[] = 'Content-Transfer-Encoding: quoted-printable';
 
         // Add In-Reply-To header if this is a reply
@@ -790,7 +796,12 @@ class GmailService implements EmailProviderInterface
                 $rawMessage .= "References: $inReplyTo\r\n";
             }
 
-            $rawMessage .= "Content-Type: text/plain; charset=utf-8\r\n";
+            // Check if body contains HTML
+            if (preg_match('/<[^>]+>/', $body)) {
+                $rawMessage .= "Content-Type: text/html; charset=utf-8\r\n";
+            } else {
+                $rawMessage .= "Content-Type: text/plain; charset=utf-8\r\n";
+            }
             $rawMessage .= "\r\n";
             $rawMessage .= $body;
 

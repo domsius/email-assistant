@@ -29,25 +29,40 @@ class ImapService implements EmailProviderInterface
     private function initializeImapClient(): void
     {
         try {
+            // Use imap_username if set, otherwise fall back to email_address
+            $username = $this->emailAccount->imap_username ?? $this->emailAccount->email_address;
+            
             $config = [
                 'host' => $this->emailAccount->imap_host,
                 'port' => $this->emailAccount->imap_port ?? 993,
                 'encryption' => $this->emailAccount->imap_encryption ?? 'ssl',
                 'validate_cert' => $this->emailAccount->imap_validate_cert ?? true,
-                'username' => $this->emailAccount->email_address,
+                'username' => $username,
                 'password' => $this->emailAccount->imap_password,
                 'protocol' => 'imap',
                 'authentication' => 'login',
             ];
+            
+            Log::info('🔍 IMAP Client Configuration', [
+                'host' => $config['host'],
+                'port' => $config['port'],
+                'encryption' => $config['encryption'],
+                'username' => $username,
+                'email_account_id' => $this->emailAccount->id,
+            ]);
 
             $this->client = $this->manager->make($config);
             
             // Test connection
             if ($this->emailAccount->is_active) {
                 $this->client->connect();
+                Log::info('✅ IMAP client connected successfully');
             }
         } catch (Exception $e) {
-            Log::error('Failed to initialize IMAP client: ' . $e->getMessage());
+            Log::error('❌ Failed to initialize IMAP client: ' . $e->getMessage(), [
+                'email_account_id' => $this->emailAccount->id,
+                'host' => $this->emailAccount->imap_host,
+            ]);
             $this->client = null;
         }
     }
@@ -113,11 +128,22 @@ class ImapService implements EmailProviderInterface
     public function fetchEmails(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false, ?string $folder = null): array
     {
         try {
+            Log::info('🔍 IMAP fetchEmails started', [
+                'email_account_id' => $this->emailAccount->id,
+                'email' => $this->emailAccount->email_address,
+                'is_authenticated' => $this->isAuthenticated(),
+                'has_client' => $this->client !== null,
+                'limit' => $limit,
+                'fetchAll' => $fetchAll,
+                'folder' => $folder,
+            ]);
+            
             if (!$this->isAuthenticated() || !$this->client) {
                 throw new Exception('IMAP account not authenticated');
             }
 
             $this->client->connect();
+            Log::info('✅ IMAP client connected for fetching');
             
             // Use config value if limit not specified
             $limit = $limit ?? config('mail-sync.sync_email_limit', 200);
@@ -129,13 +155,37 @@ class ImapService implements EmailProviderInterface
             if (!$folder) {
                 throw new Exception("Folder not found: {$folderName}");
             }
+            
+            Log::info('📁 IMAP folder selected', [
+                'folder_name' => $folderName,
+                'folder_exists' => $folder !== null,
+            ]);
 
-            // Build query
+            // Build query - must set at least one search criterion
             $query = $folder->messages();
             
-            // Add filters
+            // Get total message count before applying filters
+            try {
+                $totalMessages = $folder->messages()->all()->count();
+                $unseenMessages = $folder->messages()->unseen()->count();
+                
+                Log::info('📊 IMAP folder statistics', [
+                    'total_messages' => $totalMessages,
+                    'unseen_messages' => $unseenMessages,
+                    'folder' => $folderName,
+                ]);
+            } catch (Exception $e) {
+                Log::warning('Could not get folder statistics: ' . $e->getMessage());
+                $totalMessages = 0;
+                $unseenMessages = 0;
+            }
+            
+            // Add filters - ensure we always have at least one search criterion
             if (!$fetchAll) {
                 $query = $query->unseen();
+            } else {
+                // When fetching all, we need to specify "all" explicitly
+                $query = $query->all();
             }
             
             // Apply limit
@@ -149,6 +199,12 @@ class ImapService implements EmailProviderInterface
             // Fetch messages
             $messages = $query->get();
             
+            Log::info('📨 IMAP messages retrieved', [
+                'message_count' => count($messages),
+                'limit' => $limit,
+                'fetchAll' => $fetchAll,
+            ]);
+            
             $emails = [];
             foreach ($messages as $message) {
                 $email = $this->processImapMessage($message);
@@ -159,7 +215,7 @@ class ImapService implements EmailProviderInterface
             
             $this->client->disconnect();
             
-            Log::info('IMAP fetch completed', [
+            Log::info('✅ IMAP fetch completed', [
                 'total_emails' => count($emails),
                 'requested_limit' => $limit,
                 'fetch_all' => $fetchAll,
@@ -168,7 +224,10 @@ class ImapService implements EmailProviderInterface
             
             return $emails;
         } catch (Exception $e) {
-            Log::error('IMAP fetch emails failed: ' . $e->getMessage());
+            Log::error('❌ IMAP fetch emails failed: ' . $e->getMessage(), [
+                'email_account_id' => $this->emailAccount->id,
+                'trace' => $e->getTraceAsString(),
+            ]);
             
             if ($this->client && $this->client->isConnected()) {
                 $this->client->disconnect();
@@ -229,8 +288,9 @@ class ImapService implements EmailProviderInterface
                 $bccRecipients[] = $recipient->mail;
             }
 
-            // Get flags and labels
-            $flags = $message->getFlags();
+            // Get flags and labels - getFlags() returns a FlagCollection
+            $flagsCollection = $message->getFlags();
+            $flags = $flagsCollection->toArray();
             $isRead = in_array('Seen', $flags);
             $isStarred = in_array('Flagged', $flags);
             $isDraft = in_array('Draft', $flags);
@@ -281,12 +341,17 @@ class ImapService implements EmailProviderInterface
                 throw new Exception('SMTP configuration not found');
             }
 
+            // Use smtp_username if set, otherwise fall back to imap_username or email_address
+            $smtpUsername = $this->emailAccount->smtp_username ?? 
+                           $this->emailAccount->imap_username ?? 
+                           $this->emailAccount->email_address;
+            
             $transport = (new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
                 $this->emailAccount->smtp_host,
                 $this->emailAccount->smtp_port ?? 587,
                 $this->emailAccount->smtp_encryption === 'tls'
             ))
-            ->setUsername($this->emailAccount->email_address)
+            ->setUsername($smtpUsername)
             ->setPassword($this->emailAccount->smtp_password ?? $this->emailAccount->imap_password);
 
             $mailer = new \Symfony\Component\Mailer\Mailer($transport);

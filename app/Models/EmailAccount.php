@@ -42,12 +42,14 @@ class EmailAccount extends Model
         'imap_host',
         'imap_port',
         'imap_encryption',
+        'imap_username',
         'imap_password',
         'imap_validate_cert',
         // SMTP settings
         'smtp_host',
         'smtp_port',
         'smtp_encryption',
+        'smtp_username',
         'smtp_password',
     ];
 

@@ -578,10 +578,13 @@ class OutlookService implements EmailProviderInterface
             }
 
             // Build the email message data
+            // Check if body contains HTML
+            $contentType = preg_match('/<[^>]+>/', $emailData['body']) ? 'html' : 'text';
+            
             $messageData = [
                 'subject' => $emailData['subject'],
                 'body' => [
-                    'contentType' => 'text',
+                    'contentType' => $contentType,
                     'content' => $emailData['body'],
                 ],
                 'toRecipients' => [],
