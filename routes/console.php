@@ -34,3 +34,11 @@ Schedule::command('outlook:subscriptions cleanup')
     ->weekly()
     ->name('cleanup-outlook-subscriptions')
     ->withoutOverlapping();
+
+// Sync IMAP accounts frequently (every 2 minutes for near real-time)
+Schedule::command('imap:sync --all')
+    ->everyTwoMinutes()
+    ->name('sync-imap-accounts')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/imap-sync.log'));
