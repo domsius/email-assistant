@@ -20,3 +20,17 @@ Schedule::command('gmail:setup-watches --renew')
     ->name('renew-gmail-watches')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/gmail-watch.log'));
+
+// Renew Outlook webhook subscriptions daily
+// Subscriptions expire after 3 days max, so we renew those expiring within 24 hours
+Schedule::command('outlook:subscriptions renew')
+    ->daily()
+    ->name('renew-outlook-subscriptions')
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/outlook-webhook.log'));
+
+// Cleanup expired Outlook subscriptions weekly
+Schedule::command('outlook:subscriptions cleanup')
+    ->weekly()
+    ->name('cleanup-outlook-subscriptions')
+    ->withoutOverlapping();

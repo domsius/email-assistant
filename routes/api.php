@@ -58,6 +58,12 @@ Route::get('/webhooks/gmail/health', [App\Http\Controllers\Webhooks\GmailPubSubC
 Route::post('/webhooks/gmail', [App\Http\Controllers\Webhooks\GmailWebhookController::class, 'handleNotification']);
 Route::get('/webhooks/gmail/verify', [App\Http\Controllers\Webhooks\GmailWebhookController::class, 'verify']);
 
+// Outlook webhook routes (public - Microsoft Graph will call this)
+Route::post('/webhooks/outlook', [App\Http\Controllers\Webhooks\OutlookWebhookController::class, 'handleNotification']);
+Route::get('/webhooks/outlook/health', function () {
+    return response()->json(['status' => 'healthy', 'service' => 'outlook-webhooks']);
+});
+
 // Email sync routes (for inbox operations)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/emails/sync', function (Request $request) {

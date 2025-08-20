@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { EmailEditor } from "@/components/ui/email-editor";
 import { SignatureService } from "@/services/SignatureService";
+import { EmailContentIframe } from "@/components/inbox/email-content-iframe";
 
 
 interface EmailDetailViewProps {
@@ -583,12 +584,10 @@ ${email.content || email.plainTextContent || email.snippet || ""}`;
 
           {/* Email Body - Don't show for drafts since they're being edited */}
           {!email.isDraft && (
-            <div className="prose prose-sm max-w-none mb-8">
-              <div 
-                className="email-content"
-                dangerouslySetInnerHTML={{ 
-                  __html: email.content || email.plainTextContent || email.snippet || "No content available" 
-                }} 
+            <div className="mb-8">
+              <EmailContentIframe 
+                content={email.content || email.plainTextContent || email.snippet || "No content available"}
+                className="email-content-frame"
               />
             </div>
           )}

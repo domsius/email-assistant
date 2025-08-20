@@ -178,10 +178,18 @@ class EmailAccountController extends Controller
                     'oauth_state' => null,
                 ]);
 
-
+                Log::info('OAuth callback successful, dispatching InitialEmailSyncJob', [
+                    'email_account_id' => $emailAccount->id,
+                    'email_address' => $actualEmail,
+                    'provider' => $provider,
+                ]);
 
                 // Dispatch initial full sync job
                 \App\Jobs\InitialEmailSyncJob::dispatch($emailAccount);
+                
+                Log::info('InitialEmailSyncJob dispatched successfully', [
+                    'email_account_id' => $emailAccount->id,
+                ]);
 
                 return redirect('/email-accounts')->with('success', 'Email account connected successfully! Emails are being synced in the background.');
             } else {

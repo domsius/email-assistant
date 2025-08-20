@@ -34,6 +34,10 @@ class EmailAccount extends Model
         'gmail_watch_token',
         'gmail_watch_expiration',
         'gmail_history_id',
+        // Outlook webhook fields
+        'outlook_subscription_id',
+        'outlook_subscription_expires_at',
+        'outlook_webhook_token',
         // IMAP settings
         'imap_host',
         'imap_port',
@@ -57,6 +61,7 @@ class EmailAccount extends Model
         'sync_started_at' => 'datetime',
         'sync_completed_at' => 'datetime',
         'last_sync_at' => 'datetime',
+        'outlook_subscription_expires_at' => 'datetime',
         'is_active' => 'boolean',
         'imap_validate_cert' => 'boolean',
         'sync_progress' => 'integer',

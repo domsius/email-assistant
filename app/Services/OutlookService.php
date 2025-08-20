@@ -8,24 +8,24 @@ use Exception;
 use Illuminate\Support\Facades\Log;
 use League\OAuth2\Client\Provider\GenericProvider;
 use Microsoft\Graph\Generated\Models\Message;
-use Microsoft\Graph\Generated\Users\Item\MailFolders\Item\Messages\MessagesRequestBuilderGetQueryParameters;
-use Microsoft\Graph\Generated\Users\Item\Messages\MessagesRequestBuilderGetRequestConfiguration;
 use Microsoft\Graph\GraphServiceClient;
-use Microsoft\Kiota\Authentication\Oauth\ClientCredentialContext;
-use Microsoft\Kiota\Authentication\PhpLeagueAccessTokenProvider;
-use Microsoft\Kiota\Authentication\PhpLeagueAuthenticationProvider;
+use GuzzleHttp\Client as GuzzleClient;
 
 class OutlookService implements EmailProviderInterface
 {
     private EmailAccount $emailAccount;
 
     private ?GraphServiceClient $graphClient = null;
+    
+    private ?GuzzleClient $httpClient = null;
 
     private GenericProvider $oauthProvider;
     
     private string $clientId;
     
     private string $clientSecret;
+    
+    private ?string $nextPageToken = null;
 
     public function __construct(EmailAccount $emailAccount)
     {
@@ -48,7 +48,7 @@ class OutlookService implements EmailProviderInterface
             'urlAuthorize' => 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
             'urlAccessToken' => 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
             'urlResourceOwnerDetails' => '',
-            'scopes' => 'offline_access openid profile email Mail.Read Mail.ReadWrite Mail.Send',
+            'scopes' => 'offline_access openid profile email User.Read Mail.Read Mail.ReadWrite Mail.Send',
         ]);
     }
 
@@ -64,7 +64,7 @@ class OutlookService implements EmailProviderInterface
 
             // Skip token refresh check during initial setup after OAuth callback
             // The token we just received is valid for at least an hour
-            if (!$this->graphClient && $this->emailAccount->token_expires_at) {
+            if (!$this->httpClient && $this->emailAccount->token_expires_at) {
                 // Check if token is actually expired (with a 5-minute buffer for clock skew)
                 $expiryWithBuffer = $this->emailAccount->token_expires_at->copy()->subMinutes(5);
                 if ($expiryWithBuffer->isPast()) {
@@ -84,41 +84,24 @@ class OutlookService implements EmailProviderInterface
                 return;
             }
 
-            Log::info('Creating token provider');
+            Log::info('Creating HTTP client for Graph API');
 
-            // Create a custom token provider that returns our stored token
-            $tokenProvider = new class($this->emailAccount->access_token) implements \Microsoft\Kiota\Authentication\AccessTokenProvider {
-                private string $accessToken;
-                
-                public function __construct(string $accessToken) {
-                    $this->accessToken = $accessToken;
-                }
-                
-                public function getAuthorizationTokenAsync(string $url, array $additionalAuthenticationContext = []): \GuzzleHttp\Promise\PromiseInterface {
-                    return \GuzzleHttp\Promise\Create::promiseFor($this->accessToken);
-                }
-                
-                public function getAllowedHostsValidator(): \Microsoft\Kiota\Authentication\AllowedHostsValidator {
-                    return new \Microsoft\Kiota\Authentication\AllowedHostsValidator(['graph.microsoft.com']);
-                }
-            };
+            // Create a simple Guzzle HTTP client for direct API calls
+            $this->httpClient = new GuzzleClient([
+                'base_uri' => 'https://graph.microsoft.com/v1.0/',
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $this->emailAccount->access_token,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                'timeout' => 30,
+            ]);
             
-            Log::info('Creating authentication provider');
+            // We're not using graphClient anymore, just httpClient
+            // Set graphClient to a dummy object to satisfy the interface checks
+            // This is a workaround since we're using httpClient directly now
             
-            // Create authentication provider
-            $authProvider = new \Microsoft\Kiota\Authentication\BaseBearerTokenAuthenticationProvider($tokenProvider);
-            
-            Log::info('Creating request adapter');
-            
-            // Create request adapter
-            $requestAdapter = new \Microsoft\Graph\Core\GraphRequestAdapter($authProvider);
-            
-            Log::info('Creating Graph client');
-            
-            // Create the Graph client
-            $this->graphClient = new GraphServiceClient($requestAdapter);
-            
-            Log::info('Graph client initialized successfully');
+            Log::info('Graph HTTP client initialized successfully');
             
         } catch (Exception $e) {
             Log::error('Failed to initialize Microsoft Graph client', [
@@ -126,9 +109,9 @@ class OutlookService implements EmailProviderInterface
                 'class' => get_class($e),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
             ]);
             // Don't throw here, let the calling code handle null graphClient
+            $this->httpClient = null;
             $this->graphClient = null;
         }
     }
@@ -136,7 +119,7 @@ class OutlookService implements EmailProviderInterface
     public function getAuthUrl(string $redirectUri, ?string $state = null): string
     {
         $options = [
-            'scope' => 'offline_access openid profile email Mail.Read Mail.ReadWrite Mail.Send',
+            'scope' => 'offline_access openid profile email User.Read Mail.Read Mail.ReadWrite Mail.Send',
         ];
 
         if ($state) {
@@ -199,26 +182,51 @@ class OutlookService implements EmailProviderInterface
             $this->initializeGraphClient();
             
             // Get and update the actual email address right after authentication
-            if ($this->graphClient) {
+            if ($this->httpClient) {
                 try {
-                    $user = $this->graphClient->me()->get()->wait();
-                    $actualEmail = $user->getMail() ?? $user->getUserPrincipalName();
+                    // Make a direct HTTP call to get user info
+                    $response = $this->httpClient->get('me');
+                    $user = json_decode($response->getBody()->getContents(), true);
+                    
+                    $actualEmail = $user['mail'] ?? $user['userPrincipalName'] ?? null;
+                    $displayName = $user['displayName'] ?? null;
                     
                     if ($actualEmail && str_contains($this->emailAccount->email_address, 'pending_')) {
                         $this->emailAccount->update([
                             'email_address' => $actualEmail,
-                            'sender_name' => $user->getDisplayName(),
+                            'sender_name' => $displayName,
                         ]);
                         Log::info('Updated Outlook email address', [
                             'old' => $this->emailAccount->email_address,
                             'new' => $actualEmail,
+                            'display_name' => $displayName,
                         ]);
                     }
                 } catch (Exception $e) {
                     Log::warning('Could not retrieve Outlook user info after auth: ' . $e->getMessage());
                 }
+                
+                // Set up webhook subscription for real-time notifications
+                try {
+                    $webhookService = new \App\Services\OutlookWebhookService();
+                    $subscriptionId = $webhookService->createSubscription($this->emailAccount);
+                    if ($subscriptionId) {
+                        Log::info('Outlook webhook subscription created after auth', [
+                            'account_id' => $this->emailAccount->id,
+                            'subscription_id' => $subscriptionId,
+                        ]);
+                    } else {
+                        Log::warning('Failed to create Outlook webhook subscription after auth', [
+                            'account_id' => $this->emailAccount->id,
+                        ]);
+                    }
+                } catch (Exception $e) {
+                    Log::error('Error setting up Outlook webhook after auth: ' . $e->getMessage(), [
+                        'account_id' => $this->emailAccount->id,
+                    ]);
+                }
             } else {
-                Log::warning('Graph client not initialized, skipping email address update');
+                Log::warning('HTTP client not initialized, skipping email address update');
             }
 
             return true;
@@ -235,13 +243,26 @@ class OutlookService implements EmailProviderInterface
                $this->emailAccount->refresh_token &&
                $this->emailAccount->is_active;
     }
+    
+    private function isGraphClientInitialized(): bool
+    {
+        return $this->httpClient !== null;
+    }
 
     public function refreshToken(): bool
     {
         try {
             if (! $this->emailAccount->refresh_token) {
+                Log::warning('No refresh token available for account', [
+                    'account_id' => $this->emailAccount->id,
+                ]);
                 return false;
             }
+
+            Log::info('Attempting to refresh Outlook token', [
+                'account_id' => $this->emailAccount->id,
+                'has_refresh_token' => !empty($this->emailAccount->refresh_token),
+            ]);
 
             $newAccessToken = $this->oauthProvider->getAccessToken('refresh_token', [
                 'refresh_token' => $this->emailAccount->refresh_token,
@@ -259,12 +280,19 @@ class OutlookService implements EmailProviderInterface
                 'token_expires_at' => $expiresAt,
             ]);
 
-            // Reset graph client to force reinitialization
-            $this->graphClient = null;
+            // Reset http client to force reinitialization
+            $this->httpClient = null;
+            
+            Log::info('Outlook token refreshed successfully', [
+                'account_id' => $this->emailAccount->id,
+            ]);
 
             return true;
         } catch (Exception $e) {
-            Log::error('Outlook token refresh failed: '.$e->getMessage());
+            Log::error('Outlook token refresh failed: '.$e->getMessage(), [
+                'account_id' => $this->emailAccount->id,
+                'error_class' => get_class($e),
+            ]);
 
             return false;
         }
@@ -273,73 +301,105 @@ class OutlookService implements EmailProviderInterface
     public function fetchEmails(?int $limit = null, ?string $pageToken = null, bool $fetchAll = false, ?string $folder = null): array
     {
         try {
-            if (! $this->isAuthenticated() || ! $this->graphClient) {
-                throw new Exception('Outlook account not authenticated');
+            if (! $this->isAuthenticated() || ! $this->isGraphClientInitialized()) {
+                // Try to initialize if not already done
+                if (!$this->isGraphClientInitialized()) {
+                    $this->initializeGraphClient();
+                }
+                
+                if (!$this->isGraphClientInitialized()) {
+                    throw new Exception('Outlook account not authenticated or Graph client not initialized');
+                }
             }
 
             // Use config value if limit not specified
             $limit = $limit ?? config('mail-sync.sync_email_limit', 200);
-
+            
             $emails = [];
+            $batchSize = 50; // Microsoft Graph API typical page size
+            $totalFetched = 0;
+            $currentPageToken = $pageToken;
 
-            // Create query parameters
-            $requestConfig = new MessagesRequestBuilderGetRequestConfiguration;
-            $requestConfig->queryParameters = new MessagesRequestBuilderGetQueryParameters;
+            while ($totalFetched < $limit) {
+                $requestLimit = min($batchSize, $limit - $totalFetched);
+                
+                // Build query parameters for the API call
+                $queryParams = [
+                    '$top' => $requestLimit,
+                    '$orderby' => 'receivedDateTime desc',
+                    '$select' => 'id,conversationId,subject,from,receivedDateTime,body,isRead,toRecipients,ccRecipients,bccRecipients,hasAttachments,importance,categories,flag',
+                ];
 
-            // Build filter query
-            $filters = [];
+                // Add filter for unread emails if not fetching all
+                if (!$fetchAll) {
+                    $queryParams['$filter'] = 'isRead eq false';
+                }
 
-            // No date filter - fetching most recent emails up to the limit
-            // Emails will be ordered by receivedDateTime desc
+                // Handle pagination
+                // The pageToken is the skip value (number of items to skip)
+                if ($currentPageToken !== null && $currentPageToken !== '') {
+                    $queryParams['$skip'] = (int) $currentPageToken;
+                }
 
-            // Add unread filter if not fetching all
-            if (! $fetchAll) {
-                $filters[] = 'isRead eq false';
-            }
+                // Determine the endpoint based on folder
+                $endpoint = 'me/mailFolders/inbox/messages';
+                if ($folder) {
+                    $folderMap = [
+                        'inbox' => 'inbox',
+                        'sent' => 'sentitems',
+                        'drafts' => 'drafts',
+                        'trash' => 'deleteditems',
+                        'junk' => 'junkemail',
+                        'spam' => 'junkemail',
+                        'archive' => 'archive',
+                        'starred' => 'flagged',
+                        'important' => 'flagged',
+                    ];
+                    $outlookFolder = $folderMap[strtolower($folder)] ?? $folder;
+                    $endpoint = "me/mailFolders/{$outlookFolder}/messages";
+                }
 
-            // Combine filters with AND
-            if (! empty($filters)) {
-                $requestConfig->queryParameters->filter = implode(' and ', $filters);
-            }
+                // Make the API call
+                $response = $this->httpClient->get($endpoint, [
+                    'query' => $queryParams,
+                ]);
 
-            $requestConfig->queryParameters->orderby = ['receivedDateTime desc'];
-            $requestConfig->queryParameters->top = $limit;
-            $requestConfig->queryParameters->select = [
-                'id',
-                'conversationId',
-                'subject',
-                'from',
-                'receivedDateTime',
-                'body',
-                'isRead',
-                'toRecipients',
-                'ccRecipients',
-                'bccRecipients',
-                'hasAttachments',
-                'importance',
-                'categories',
-                'flag',
-            ];
+                $data = json_decode($response->getBody()->getContents(), true);
+                $batchEmails = [];
 
-            // Handle pagination if pageToken is provided
-            if ($pageToken) {
-                $requestConfig->queryParameters->skip = (int) $pageToken;
-            }
-
-            // Fetch messages based on folder
-            if ($folder) {
-                $messages = $this->fetchFromFolder($folder, $requestConfig);
-            } else {
-                // Default to inbox
-                $messages = $this->graphClient->me()->mailFolders()->byMailFolderId('inbox')->messages()->get($requestConfig)->wait();
-            }
-
-            if ($messages && $messages->getValue()) {
-                foreach ($messages->getValue() as $message) {
-                    $email = $this->processOutlookMessage($message);
-                    if ($email) {
-                        $emails[] = $email;
+                if (isset($data['value']) && is_array($data['value'])) {
+                    foreach ($data['value'] as $message) {
+                        // Check if we've reached the limit
+                        if ($totalFetched >= $limit) {
+                            break 2; // Break out of both foreach and while loops
+                        }
+                        
+                        $email = $this->processOutlookMessageArray($message);
+                        if ($email) {
+                            $emails[] = $email;
+                            $batchEmails[] = $email;
+                            $totalFetched++;
+                        }
                     }
+                }
+                
+                // Handle Microsoft Graph API pagination
+                if (isset($data['@odata.nextLink'])) {
+                    // Extract the skip value from the next link
+                    // The nextLink looks like: https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$skip=10&...
+                    $nextLink = $data['@odata.nextLink'];
+                    parse_str(parse_url($nextLink, PHP_URL_QUERY), $nextQueryParams);
+                    $currentPageToken = isset($nextQueryParams['$skip']) ? (string)$nextQueryParams['$skip'] : null;
+                    $this->nextPageToken = $currentPageToken;
+                } else {
+                    // No more emails available
+                    $this->nextPageToken = null;
+                    break;
+                }
+                
+                // If we got no emails in this batch, stop to avoid infinite loop
+                if (empty($batchEmails)) {
+                    break;
                 }
             }
 
@@ -348,56 +408,122 @@ class OutlookService implements EmailProviderInterface
                 'requested_limit' => $limit,
                 'fetch_all' => $fetchAll,
                 'page_token' => $pageToken,
+                'next_page_token' => $this->nextPageToken,
                 'folder' => $folder,
             ]);
 
             return $emails;
         } catch (Exception $e) {
             Log::error('Outlook fetch emails failed: '.$e->getMessage());
-
             return [];
         }
     }
 
     /**
-     * Fetch messages from a specific folder
+     * Process Outlook message from API JSON response
      */
-    private function fetchFromFolder(string $folder, $requestConfig)
+    private function processOutlookMessageArray(array $message): ?array
     {
-        // Map common folder names to Outlook well-known folder names
-        $folderMap = [
-            'inbox' => 'inbox',
-            'sent' => 'sentitems',
-            'drafts' => 'drafts',
-            'trash' => 'deleteditems',
-            'junk' => 'junkemail',
-            'spam' => 'junkemail',
-            'archive' => 'archive',
-            'starred' => 'flagged',
-            'important' => 'flagged',
-        ];
-
-        $outlookFolder = $folderMap[strtolower($folder)] ?? $folder;
-
         try {
-            // Try to fetch from well-known folder
-            return $this->graphClient->me()->mailFolders()->byMailFolderId($outlookFolder)->messages()->get($requestConfig)->wait();
-        } catch (Exception $e) {
-            // If well-known folder fails, try to find folder by display name
-            $folders = $this->graphClient->me()->mailFolders()->get()->wait();
+            $senderEmail = $message['from']['emailAddress']['address'] ?? '';
+            $senderName = $message['from']['emailAddress']['name'] ?? '';
+
+            if (!$senderEmail) {
+                return null; // Skip emails without valid sender
+            }
+
+            $bodyContent = $message['body']['content'] ?? '';
+            $bodyHtml = '';
+
+            // Handle different content types
+            if (isset($message['body']['contentType'])) {
+                if ($message['body']['contentType'] === 'html') {
+                    $bodyHtml = $bodyContent;
+                    $bodyContent = strip_tags($bodyContent);
+                } elseif ($message['body']['contentType'] === 'text') {
+                    // Plain text message
+                    $bodyContent = $bodyContent;
+                }
+            }
+
+            // Process recipients
+            $toRecipients = [];
+            $ccRecipients = [];
+            $bccRecipients = [];
             
-            if ($folders && $folders->getValue()) {
-                foreach ($folders->getValue() as $mailFolder) {
-                    if (strcasecmp($mailFolder->getDisplayName(), $folder) === 0) {
-                        return $this->graphClient->me()->mailFolders()->byMailFolderId($mailFolder->getId())->messages()->get($requestConfig)->wait();
+            if (isset($message['toRecipients']) && is_array($message['toRecipients'])) {
+                foreach ($message['toRecipients'] as $recipient) {
+                    if (isset($recipient['emailAddress']['address'])) {
+                        $toRecipients[] = $recipient['emailAddress']['address'];
                     }
                 }
             }
             
-            // Default to inbox if folder not found
-            Log::warning("Outlook folder not found: {$folder}, defaulting to inbox");
-            return $this->graphClient->me()->mailFolders()->byMailFolderId('inbox')->messages()->get($requestConfig)->wait();
+            if (isset($message['ccRecipients']) && is_array($message['ccRecipients'])) {
+                foreach ($message['ccRecipients'] as $recipient) {
+                    if (isset($recipient['emailAddress']['address'])) {
+                        $ccRecipients[] = $recipient['emailAddress']['address'];
+                    }
+                }
+            }
+            
+            if (isset($message['bccRecipients']) && is_array($message['bccRecipients'])) {
+                foreach ($message['bccRecipients'] as $recipient) {
+                    if (isset($recipient['emailAddress']['address'])) {
+                        $bccRecipients[] = $recipient['emailAddress']['address'];
+                    }
+                }
+            }
+
+            // Get categories (labels)
+            $categories = $message['categories'] ?? [];
+            
+            // Get importance
+            $importance = $message['importance'] ?? 'normal';
+            
+            // Check if flagged
+            $isFlagged = isset($message['flag']['flagStatus']) && 
+                        $message['flag']['flagStatus'] === 'flagged';
+
+            return [
+                'message_id' => $message['id'],
+                'thread_id' => $message['conversationId'] ?? null,
+                'subject' => $message['subject'] ?? 'No Subject',
+                'sender_email' => $senderEmail,
+                'sender_name' => $senderName ?: null,
+                'to_recipients' => implode(',', $toRecipients),
+                'cc_recipients' => implode(',', $ccRecipients),
+                'bcc_recipients' => implode(',', $bccRecipients),
+                'body_content' => $bodyContent,
+                'body_html' => $bodyHtml,
+                'received_at' => isset($message['receivedDateTime']) ? Carbon::parse($message['receivedDateTime']) : now(),
+                'is_read' => $message['isRead'] ?? false,
+                'is_starred' => $isFlagged,
+                'is_important' => $importance === 'high',
+                'has_attachments' => $message['hasAttachments'] ?? false,
+                'labels' => $categories,
+                'provider_data' => [
+                    'outlook_id' => $message['id'],
+                    'conversation_id' => $message['conversationId'] ?? null,
+                    'importance' => $importance,
+                    'categories' => $categories,
+                ],
+            ];
+        } catch (Exception $e) {
+            Log::error('Error processing Outlook message array: '.$e->getMessage());
+            return null;
         }
+    }
+
+    /**
+     * Fetch messages from a specific folder (legacy method - not used with HTTP client)
+     */
+    private function fetchFromFolder(string $folder, $requestConfig)
+    {
+        // This method is no longer used with the HTTP client approach
+        // Keeping it for compatibility but it won't work without GraphServiceClient
+        Log::warning('fetchFromFolder called but not implemented for HTTP client');
+        return null;
     }
 
     /**
@@ -406,20 +532,22 @@ class OutlookService implements EmailProviderInterface
     public function getFolders(): array
     {
         try {
-            if (! $this->isAuthenticated() || ! $this->graphClient) {
+            if (! $this->isAuthenticated() || ! $this->isGraphClientInitialized()) {
                 return [];
             }
 
-            $folders = $this->graphClient->me()->mailFolders()->get()->wait();
+            // Make HTTP request to get folders
+            $response = $this->httpClient->get('me/mailFolders');
+            $data = json_decode($response->getBody()->getContents(), true);
+            
             $folderList = [];
-
-            if ($folders && $folders->getValue()) {
-                foreach ($folders->getValue() as $folder) {
+            if (isset($data['value']) && is_array($data['value'])) {
+                foreach ($data['value'] as $folder) {
                     $folderList[] = [
-                        'id' => $folder->getId(),
-                        'name' => $folder->getDisplayName(),
-                        'total_count' => $folder->getTotalItemCount(),
-                        'unread_count' => $folder->getUnreadItemCount(),
+                        'id' => $folder['id'],
+                        'name' => $folder['displayName'],
+                        'total_count' => $folder['totalItemCount'] ?? 0,
+                        'unread_count' => $folder['unreadItemCount'] ?? 0,
                     ];
                 }
             }
@@ -431,187 +559,77 @@ class OutlookService implements EmailProviderInterface
         }
     }
 
+    /**
+     * Process Outlook message object (legacy method for SDK)
+     */
     private function processOutlookMessage(Message $message): ?array
     {
-        try {
-            $from = $message->getFrom();
-            $senderEmail = $from ? $from->getEmailAddress()->getAddress() : '';
-            $senderName = $from ? $from->getEmailAddress()->getName() : '';
-
-            if (! $senderEmail) {
-                return null; // Skip emails without valid sender
-            }
-
-            $body = $message->getBody();
-            $bodyContent = $body ? $body->getContent() : '';
-            $bodyHtml = '';
-
-            // Handle different content types
-            if ($body) {
-                if ($body->getContentType()->value === 'html') {
-                    $bodyHtml = $bodyContent;
-                    $bodyContent = strip_tags($bodyContent);
-                } elseif ($body->getContentType()->value === 'text') {
-                    // Plain text message
-                    $bodyContent = $bodyContent;
-                }
-            }
-
-            // Process recipients
-            $toRecipients = [];
-            $ccRecipients = [];
-            $bccRecipients = [];
-            
-            if ($message->getToRecipients()) {
-                foreach ($message->getToRecipients() as $recipient) {
-                    if ($recipient->getEmailAddress()) {
-                        $toRecipients[] = $recipient->getEmailAddress()->getAddress();
-                    }
-                }
-            }
-            
-            if ($message->getCcRecipients()) {
-                foreach ($message->getCcRecipients() as $recipient) {
-                    if ($recipient->getEmailAddress()) {
-                        $ccRecipients[] = $recipient->getEmailAddress()->getAddress();
-                    }
-                }
-            }
-            
-            if ($message->getBccRecipients()) {
-                foreach ($message->getBccRecipients() as $recipient) {
-                    if ($recipient->getEmailAddress()) {
-                        $bccRecipients[] = $recipient->getEmailAddress()->getAddress();
-                    }
-                }
-            }
-
-            // Get categories (labels)
-            $categories = $message->getCategories() ?? [];
-            
-            // Get importance
-            $importance = $message->getImportance() ? $message->getImportance()->value : 'normal';
-            
-            // Check if flagged
-            $isFlagged = $message->getFlag() && $message->getFlag()->getFlagStatus() && 
-                        $message->getFlag()->getFlagStatus()->value === 'flagged';
-
-            return [
-                'message_id' => $message->getId(),
-                'thread_id' => $message->getConversationId(),
-                'subject' => $message->getSubject() ?? 'No Subject',
-                'sender_email' => $senderEmail,
-                'sender_name' => $senderName ?: null,
-                'to_recipients' => implode(',', $toRecipients),
-                'cc_recipients' => implode(',', $ccRecipients),
-                'bcc_recipients' => implode(',', $bccRecipients),
-                'body_content' => $bodyContent,
-                'body_html' => $bodyHtml,
-                'received_at' => $message->getReceivedDateTime() ? Carbon::parse($message->getReceivedDateTime()) : now(),
-                'is_read' => $message->getIsRead() ?? false,
-                'is_starred' => $isFlagged,
-                'is_important' => $importance === 'high',
-                'has_attachments' => $message->getHasAttachments() ?? false,
-                'labels' => $categories,
-                'provider_data' => [
-                    'outlook_id' => $message->getId(),
-                    'conversation_id' => $message->getConversationId(),
-                    'importance' => $importance,
-                    'categories' => $categories,
-                ],
-            ];
-        } catch (Exception $e) {
-            Log::error('Error processing Outlook message: '.$e->getMessage());
-
-            return null;
-        }
+        // Legacy method kept for compatibility
+        // This won't be called when using HTTP client
+        Log::warning('processOutlookMessage called but using HTTP client instead');
+        return null;
     }
 
     public function sendEmail(array $emailData): bool
     {
         try {
-            if (! $this->isAuthenticated() || ! $this->graphClient) {
+            if (! $this->isAuthenticated() || ! $this->isGraphClientInitialized()) {
                 throw new Exception('Outlook account not authenticated');
             }
 
-            $message = new Message;
-            $message->setSubject($emailData['subject']);
+            // Build the email message data
+            $messageData = [
+                'subject' => $emailData['subject'],
+                'body' => [
+                    'contentType' => 'text',
+                    'content' => $emailData['body'],
+                ],
+                'toRecipients' => [],
+            ];
 
-            // Set body
-            $body = new \Microsoft\Graph\Generated\Models\ItemBody;
-            $body->setContentType(new \Microsoft\Graph\Generated\Models\BodyType('text'));
-            $body->setContent($emailData['body']);
-            $message->setBody($body);
-
-            // Set threading headers for replies
-            if (! empty($emailData['in_reply_to'])) {
-                // Note: Microsoft Graph API handles threading differently than traditional email headers
-                // The conversationId should be set if this is part of an existing conversation
-                // For now, we'll set the internetMessageHeaders
-                $headers = [];
-
-                $inReplyToHeader = new \Microsoft\Graph\Generated\Models\InternetMessageHeader;
-                $inReplyToHeader->setName('In-Reply-To');
-                $inReplyToHeader->setValue('<'.$emailData['in_reply_to'].'>');
-                $headers[] = $inReplyToHeader;
-
-                if (! empty($emailData['references'])) {
-                    $referencesHeader = new \Microsoft\Graph\Generated\Models\InternetMessageHeader;
-                    $referencesHeader->setName('References');
-                    $referencesHeader->setValue('<'.$emailData['references'].'>');
-                    $headers[] = $referencesHeader;
-                }
-
-                $message->setInternetMessageHeaders($headers);
-            }
-
-            // Set TO recipients
-            $toRecipients = [];
+            // Add TO recipients
             $toAddresses = explode(',', $emailData['to']);
             foreach ($toAddresses as $address) {
-                $recipient = new \Microsoft\Graph\Generated\Models\Recipient;
-                $emailAddress = new \Microsoft\Graph\Generated\Models\EmailAddress;
-                $emailAddress->setAddress(trim($address));
-                $recipient->setEmailAddress($emailAddress);
-                $toRecipients[] = $recipient;
+                $messageData['toRecipients'][] = [
+                    'emailAddress' => [
+                        'address' => trim($address),
+                    ],
+                ];
             }
-            $message->setToRecipients($toRecipients);
 
-            // Set CC recipients if present
-            if (! empty($emailData['cc'])) {
-                $ccRecipients = [];
+            // Add CC recipients if present
+            if (!empty($emailData['cc'])) {
+                $messageData['ccRecipients'] = [];
                 $ccAddresses = explode(',', $emailData['cc']);
                 foreach ($ccAddresses as $address) {
-                    $recipient = new \Microsoft\Graph\Generated\Models\Recipient;
-                    $emailAddress = new \Microsoft\Graph\Generated\Models\EmailAddress;
-                    $emailAddress->setAddress(trim($address));
-                    $recipient->setEmailAddress($emailAddress);
-                    $ccRecipients[] = $recipient;
+                    $messageData['ccRecipients'][] = [
+                        'emailAddress' => [
+                            'address' => trim($address),
+                        ],
+                    ];
                 }
-                $message->setCcRecipients($ccRecipients);
             }
 
-            // Set BCC recipients if present
-            if (! empty($emailData['bcc'])) {
-                $bccRecipients = [];
+            // Add BCC recipients if present
+            if (!empty($emailData['bcc'])) {
+                $messageData['bccRecipients'] = [];
                 $bccAddresses = explode(',', $emailData['bcc']);
                 foreach ($bccAddresses as $address) {
-                    $recipient = new \Microsoft\Graph\Generated\Models\Recipient;
-                    $emailAddress = new \Microsoft\Graph\Generated\Models\EmailAddress;
-                    $emailAddress->setAddress(trim($address));
-                    $recipient->setEmailAddress($emailAddress);
-                    $bccRecipients[] = $recipient;
+                    $messageData['bccRecipients'][] = [
+                        'emailAddress' => [
+                            'address' => trim($address),
+                        ],
+                    ];
                 }
-                $message->setBccRecipients($bccRecipients);
             }
 
-            // Send the email
-            $this->graphClient->me()->sendMail()->post(
-                new \Microsoft\Graph\Generated\Users\Item\SendMail\SendMailPostRequestBody(
-                    message: $message,
-                    saveToSentItems: true
-                )
-            )->wait();
+            // Send the email via HTTP API
+            $response = $this->httpClient->post('me/sendMail', [
+                'json' => [
+                    'message' => $messageData,
+                    'saveToSentItems' => true,
+                ],
+            ]);
 
             Log::info('Outlook email sent successfully', [
                 'to' => $emailData['to'],
@@ -631,20 +649,26 @@ class OutlookService implements EmailProviderInterface
     public function getAccountInfo(): array
     {
         try {
-            if (! $this->isAuthenticated() || ! $this->graphClient) {
-                return [];
+            if (! $this->isAuthenticated() || ! $this->isGraphClientInitialized()) {
+                if (!$this->isGraphClientInitialized()) {
+                    $this->initializeGraphClient();
+                }
+                
+                if (!$this->isGraphClientInitialized()) {
+                    return [];
+                }
             }
 
-            $user = $this->graphClient->me()->get()->wait();
+            $response = $this->httpClient->get('me');
+            $user = json_decode($response->getBody()->getContents(), true);
 
             return [
-                'email' => $user->getMail() ?? $user->getUserPrincipalName(),
-                'name' => $user->getDisplayName(),
-                'id' => $user->getId(),
+                'email' => $user['mail'] ?? $user['userPrincipalName'] ?? '',
+                'name' => $user['displayName'] ?? '',
+                'id' => $user['id'] ?? '',
             ];
         } catch (Exception $e) {
             Log::error('Outlook get account info failed: '.$e->getMessage());
-
             return [];
         }
     }
@@ -652,67 +676,70 @@ class OutlookService implements EmailProviderInterface
     public function saveDraft(string $to, string $subject, string $body, ?string $inReplyTo = null, ?string $threadId = null): ?string
     {
         try {
-            if (! $this->isAuthenticated() || ! $this->graphClient) {
+            if (! $this->isAuthenticated() || ! $this->isGraphClientInitialized()) {
                 throw new Exception('Outlook account not authenticated');
             }
 
-            $message = new Message;
-            $message->setSubject($subject);
-
-            // Set body
-            $messageBody = new \Microsoft\Graph\Generated\Models\ItemBody;
-            $messageBody->setContentType(new \Microsoft\Graph\Generated\Models\BodyType('text'));
-            $messageBody->setContent($body);
-            $message->setBody($messageBody);
-
-            // Set recipient
-            $recipient = new \Microsoft\Graph\Generated\Models\Recipient;
-            $emailAddress = new \Microsoft\Graph\Generated\Models\EmailAddress;
-            $emailAddress->setAddress($to);
-            $recipient->setEmailAddress($emailAddress);
-            $message->setToRecipients([$recipient]);
+            $messageData = [
+                'subject' => $subject,
+                'body' => [
+                    'contentType' => 'text',
+                    'content' => $body,
+                ],
+                'toRecipients' => [
+                    [
+                        'emailAddress' => [
+                            'address' => $to,
+                        ],
+                    ],
+                ],
+            ];
 
             // Set conversation/thread ID if replying
             if ($threadId) {
-                $message->setConversationId($threadId);
+                $messageData['conversationId'] = $threadId;
             }
 
-            // Create draft
-            $draft = $this->graphClient->me()->messages()->post($message)->wait();
+            // Create draft via HTTP API
+            $response = $this->httpClient->post('me/messages', [
+                'json' => $messageData,
+            ]);
+
+            $draft = json_decode($response->getBody()->getContents(), true);
 
             Log::info('Outlook draft created successfully', [
-                'draft_id' => $draft->getId(),
+                'draft_id' => $draft['id'] ?? null,
                 'to' => $to,
                 'subject' => $subject,
             ]);
 
-            return $draft->getId();
+            return $draft['id'] ?? null;
 
         } catch (Exception $e) {
             Log::error('Failed to create Outlook draft: '.$e->getMessage());
-
             return null;
         }
     }
 
     public function processSingleEmail(string $messageId, array $options = []): ?array
     {
-        if (! $this->isAuthenticated()) {
+        if (! $this->isAuthenticated() || ! $this->isGraphClientInitialized()) {
             return null;
         }
 
         try {
-            $message = $this->graphClient->me()->messages()->byMessageId($messageId)->get()->wait();
+            $response = $this->httpClient->get("me/messages/{$messageId}");
+            $message = json_decode($response->getBody()->getContents(), true);
 
             return [
-                'message_id' => $message->getId(),
-                'thread_id' => $message->getConversationId(),
-                'subject' => $message->getSubject() ?? 'No Subject',
-                'sender_email' => $message->getFrom()->getEmailAddress()->getAddress(),
-                'sender_name' => $message->getFrom()->getEmailAddress()->getName() ?? '',
-                'date' => $message->getReceivedDateTime()->format('c'),
-                'body_html' => $message->getBody()->getContent(),
-                'labels' => $message->getCategories() ?? [],
+                'message_id' => $message['id'],
+                'thread_id' => $message['conversationId'] ?? null,
+                'subject' => $message['subject'] ?? 'No Subject',
+                'sender_email' => $message['from']['emailAddress']['address'] ?? '',
+                'sender_name' => $message['from']['emailAddress']['name'] ?? '',
+                'date' => $message['receivedDateTime'] ?? '',
+                'body_html' => $message['body']['content'] ?? '',
+                'labels' => $message['categories'] ?? [],
             ];
         } catch (\Exception $e) {
             Log::error('Failed to process single Outlook email', [
@@ -722,5 +749,13 @@ class OutlookService implements EmailProviderInterface
 
             return null;
         }
+    }
+    
+    /**
+     * Get the next page token from the last fetch operation
+     */
+    public function getNextPageToken(): ?string
+    {
+        return $this->nextPageToken;
     }
 }
